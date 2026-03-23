@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPR Utility Tools - Survey Area Converter</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary: #3b82f6;
+            --primary-dark: #1e40af;
+            --primary-light: #60a5fa;
+            --secondary: #10b981;
+            --secondary-dark: #059669;
+            --danger: #ef4444;
+            --gray-50: #f9fafb;
+            --gray-100: #f3f4f6;
+            --gray-200: #e5e7eb;
+            --gray-300: #d1d5db;
+            --gray-400: #9ca3af;
+            --gray-500: #6b7280;
+            --gray-600: #4b5563;
+            --gray-700: #374151;
+            --gray-800: #1f2937;
+            --gray-900: #111827;
+            --text-primary: #111827;
+            --text-secondary: #4b5563;
+            --border-radius: 8px;
+            --transition: all 0.3s ease;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+            background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
+            min-height: 100vh;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+
+        header {
+            width: 100%;
+            background: linear-gradient(135deg, var(--gray-900) 0%, var(--gray-800) 100%);
+            color: white;
+            padding: 40px 30px;
+            text-align: center;
+            border-bottom: 3px solid var(--primary);
+        }
+
+        .header-content {
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 24px;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        .header-content img {
+            height: 60px;
+            width: auto;
+            border-radius: var(--border-radius);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .header-text {
+            text-align: left;
+        }
+
+        .header-text h1 {
+            margin: 0;
+            font-size: 2em;
+            font-weight: 700;
+            color: white;
+            letter-spacing: -0.5px;
+        }
+
+        .header-text p {
+            margin: 8px 0 0;
+            color: var(--gray-300);
+            font-size: 0.95em;
+        }
+
+        nav {
+            width: 100%;
+            background: var(--gray-50);
+            padding: 16px 30px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--gray-200);
+        }
+
+        nav a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.95em;
+            font-weight: 500;
+            transition: var(--transition);
+            padding: 8px 16px;
+            border-radius: 4px;
+        }
+
+        nav a:hover {
+            color: var(--primary);
+            background: rgba(59, 130, 246, 0.1);
+        }
+
+        nav a.active {
+            color: var(--primary);
+            background: rgba(59, 130, 246, 0.1);
+        }
+
+        .container {
+            max-width: 900px;
+            width: 90%;
+            margin: 30px auto;
+            background: white;
+            border-radius: var(--border-radius);
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.08);
+            box-sizing: border-box;
+        }
+
+        h2 {
+            font-size: 1.75em;
+            color: var(--text-primary);
+            margin-top: 0;
+            margin-bottom: 8px;
+            font-weight: 700;
+        }
+
+        .subtitle {
+            color: var(--text-secondary);
+            margin-bottom: 30px;
+            font-size: 0.95em;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+            margin-bottom: 30px;
+        }
+
+        @media (max-width: 768px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .form-group {
+            margin-bottom: 0;
+        }
+
+        label {
+            display: block;
+            font-size: 0.95em;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: var(--text-primary);
+        }
+
+        input[type="text"],
+        input[type="number"],
+        select {
+            width: 100%;
+            background: white;
+            border: 1px solid var(--gray-300);
+            padding: 12px;
+            border-radius: var(--border-radius);
+            color: var(--text-primary);
+            font-size: 0.95em;
+            font-family: inherit;
+            transition: var(--transition);
+        }
+
+        input:focus,
+        select:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        .file-upload {
+            position: relative;
+            border: 2px dashed var(--primary);
+            border-radius: var(--border-radius);
+            padding: 50px 40px;
+            text-align: center;
+            transition: var(--transition);
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.05) 0%, rgba(59, 130, 246, 0.02) 100%);
+            cursor: pointer;
+            margin-bottom: 30px;
+        }
+
+        .file-upload:hover {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(59, 130, 246, 0.05) 100%);
+            border-color: var(--primary-dark);
+        }
+
+        .file-upload.drag-over {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(59, 130, 246, 0.1) 100%);
+            border-color: var(--primary-dark);
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.2);
+        }
+
+        .file-upload input {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            cursor: pointer;
+        }
+
+        .upload-icon {
+            font-size: 3.5em;
+            margin-bottom: 12px;
+            display: block;
+            filter: drop-shadow(0 2px 4px rgba(59, 130, 246, 0.2));
+        }
+
+        #fileNameDisplay {
+            display: block;
+            font-size: 0.95em;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 14px 24px;
+            border-radius: var(--border-radius);
+            border: none;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: var(--transition);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+            font-family: inherit;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-dark);
+            box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
+            transform: translateY(-2px);
+        }
+
+        .btn-primary:active {
+            transform: translateY(0);
+        }
+
+        .btn:disabled {
+            background: var(--gray-300);
+            cursor: not-allowed;
+            box-shadow: none;
+            transform: none;
+        }
+
+        .results {
+            margin-top: 30px;
+            display: none;
+            animation: slideIn 0.3s ease;
+        }
+
+        .result-card {
+            background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+            border: 2px solid var(--secondary);
+            border-radius: var(--border-radius);
+            padding: 24px;
+            margin-bottom: 20px;
+            color: #065f46;
+        }
+
+        .result-card h3 {
+            margin-top: 0;
+            margin-bottom: 12px;
+            font-size: 1.15em;
+            font-weight: 700;
+        }
+
+        .result-card p {
+            margin: 0 0 20px 0;
+            font-size: 0.95em;
+            opacity: 0.9;
+        }
+
+        .download-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px;
+            background: white;
+            border: 1px solid var(--gray-200);
+            border-radius: var(--border-radius);
+            margin-top: 12px;
+            transition: var(--transition);
+        }
+
+        .download-item:hover {
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+            border-color: var(--primary);
+        }
+
+        .download-item span {
+            font-weight: 500;
+            color: var(--text-primary);
+            font-size: 0.95em;
+        }
+
+        .download-link {
+            color: var(--primary);
+            text-decoration: none;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: var(--transition);
+        }
+
+        .download-link:hover {
+            color: var(--primary-dark);
+        }
+
+        .status-msg {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 0.95em;
+            color: var(--text-secondary);
+            min-height: 20px;
+        }
+
+        .status-msg.error {
+            color: var(--danger);
+            font-weight: 500;
+        }
+
+        .status-msg.success {
+            color: var(--secondary);
+            font-weight: 500;
+        }
+
+        #loadingSpinner {
+            display: none;
+            width: 18px;
+            height: 18px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-top: 3px solid white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .logout-btn {
+            background: transparent !important;
+            border: 2px solid var(--danger) !important;
+            color: var(--danger) !important;
+            padding: 8px 16px !important;
+            font-size: 0.85em !important;
+            border-radius: var(--border-radius) !important;
+            cursor: pointer !important;
+            transition: var(--transition) !important;
+            width: auto !important;
+            margin-top: 0 !important;
+            text-transform: uppercase !important;
+            letter-spacing: 0.5px !important;
+            font-weight: 600 !important;
+            display: flex !important;
+            align-items: center !important;
+            gap: 8px !important;
+            box-shadow: none !important;
+        }
+
+        .logout-btn:hover {
+            background: var(--danger) !important;
+            color: white !important;
+        }
+
+        @media (max-width: 768px) {
+            header {
+                padding: 24px 16px;
+            }
+
+            .header-content {
+                gap: 16px;
+            }
+
+            .header-text h1 {
+                font-size: 1.5em;
+            }
+
+            .container {
+                padding: 24px 16px;
+                margin: 16px auto;
+            }
+
+            h2 {
+                font-size: 1.4em;
+            }
+
+            .file-upload {
+                padding: 40px 24px;
+            }
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--gray-100);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--gray-400);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--gray-500);
+        }
+    </style>
+</head>
+
+<body>
+
+    <header>
+        <div class="header-content">
+            <img src="/static/logo.jpeg" alt="Stratum XR Logo">
+            <div class="header-text">
+                <h1>GPR Utility Tools</h1>
+                <p>Survey Area Converter & KML Generator</p>
+            </div>
+        </div>
+    </header>
+
+    <nav>
+        <div style="display: flex; gap: 24px; align-items: center;">
+            <a href="/">3D VR Viewer</a>
+            <a href="/converter" class="active">Survey Area Converter</a>
+        </div>
+
+        <form method="POST" action="/logout" style="margin: 0;">
+            <button type="submit" class="logout-btn">
+                <i class="fas fa-power-off"></i> Logout
+            </button>
+        </form>
+    </nav>
+
+    <div class="container">
+        <h2>📊 Survey Area Converter</h2>
+        <p class="subtitle">Convert UTM coordinates to Lat/Long and generate survey area boundaries (KML).</p>
+
+        <form id="convertForm">
+            <div class="file-upload" id="dropZone">
+                <span class="upload-icon">📂</span>
+                <span id="fileNameDisplay">Click or drag your GPR CSV file here</span>
+                <input type="file" id="fileInput" name="file" accept=".csv" required onchange="updateFileName()">
+            </div>
+
+            <div class="grid">
+                <div class="form-group">
+                    <label for="utm_zone">UTM Zone</label>
+                    <input type="number" id="utm_zone" name="utm_zone" value="44" min="1" max="60">
+                </div>
+                <div class="form-group">
+                    <label for="hemisphere">Hemisphere</label>
+                    <select id="hemisphere" name="hemisphere">
+                        <option value="north" selected>North</option>
+                        <option value="south">South</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="easting_col">Easting Column Name</label>
+                    <input type="text" id="easting_col" name="easting_col" value=" UTM Easting (44P)"
+                        placeholder="Exact column name">
+                </div>
+                <div class="form-group">
+                    <label for="northing_col">Northing Column Name</label>
+                    <input type="text" id="northing_col" name="northing_col" value=" UTM Northing (44P)"
+                        placeholder="Exact column name">
+                </div>
+            </div>
+
+            <button type="button" id="submitBtn" class="btn btn-primary" onclick="runConversion()">
+                <div id="loadingSpinner"></div>
+                <span id="btnText">🚀 Convert & Generate KML</span>
+            </button>
+        </form>
+
+        <div id="status" class="status-msg"></div>
+
+        <div id="results" class="results">
+            <div class="result-card">
+                <h3>✅ Processing Complete!</h3>
+                <p>Your files are ready for download.</p>
+
+                <div class="download-item">
+                    <span>Updated GPR Data (CSV with Lat/Long)</span>
+                    <a id="csvDownloadLink" href="#" class="download-link" download>📥 Download CSV</a>
+                </div>
+                <div class="download-item">
+                    <span>Survey Area Boundary (KML for Google Earth)</span>
+                    <a id="kmlDownloadLink" href="#" class="download-link" download>📥 Download KML</a>
+                </div>
+            </div>
+
+            <button class="btn" style="background: var(--gray-600); color: white;" onclick="location.reload()">
+                ↻ Process New File
+            </button>
+        </div>
+    </div>
+
+    <script>
+        function updateFileName() {
+            const input = document.getElementById('fileInput');
+            const display = document.getElementById('fileNameDisplay');
+            if (input.files.length > 0) {
+                display.innerText = "✓ Selected: " + input.files[0].name;
+                display.style.color = "var(--secondary)";
+                display.style.fontWeight = "600";
+            }
+        }
+
+        // Drag and drop support
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => {
+                dropZone.classList.add('drag-over');
+            }, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => {
+                dropZone.classList.remove('drag-over');
+            }, false);
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            fileInput.files = files;
+            updateFileName();
+        }, false);
+
+        async function runConversion() {
+            const form = document.getElementById('convertForm');
+            const btn = document.getElementById('submitBtn');
+            const btnText = document.getElementById('btnText');
+            const spinner = document.getElementById('loadingSpinner');
+            const status = document.getElementById('status');
+            const results = document.getElementById('results');
+
+            if (!document.getElementById('fileInput').files[0]) {
+                status.classList.add('error');
+                status.innerText = "⚠️ Please select a file first.";
+                setTimeout(() => {
+                    status.innerText = "";
+                    status.classList.remove('error');
+                }, 4000);
+                return;
+            }
+
+            // UI State
+            btn.disabled = true;
+            spinner.style.display = "block";
+            btnText.innerText = "Processing...";
+            status.classList.remove('error', 'success');
+            status.innerText = "📍 Reading file and calculating boundary...";
+            results.style.display = "none";
+
+            const formData = new FormData(form);
+
+            try {
+                const response = await fetch('/tools/survey_boundary', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    status.classList.add('success');
+                    status.innerText = "✅ Conversion successful!";
+                    results.style.display = "block";
+
+                    document.getElementById('csvDownloadLink').href = data.csv_url;
+                    document.getElementById('kmlDownloadLink').href = data.kml_url;
+
+                    // Auto-focus results
+                    setTimeout(() => {
+                        results.scrollIntoView({ behavior: 'smooth' });
+                    }, 300);
+                } else {
+                    status.classList.add('error');
+                    status.innerHTML = `❌ Error: ${data.error}`;
+                }
+            } catch (err) {
+                status.classList.add('error');
+                status.innerHTML = `❌ Connection error. Please try again.`;
+            } finally {
+                btn.disabled = false;
+                spinner.style.display = "none";
+                btnText.innerText = "🚀 Convert & Generate KML";
+            }
+        }
+    </script>
+</body>
+
+</html>

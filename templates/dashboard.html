@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPR Explorer | Scan Hub</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+
+<body>
+    <div class="grid-bg"></div>
+    <div class="map-overlay"></div>
+    <div class="scan-line"></div>
+
+    <div class="container dashboard-container">
+        <div
+            style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 30px; border-bottom: 2px solid var(--primary-glow); padding-bottom: 15px;">
+            <div>
+                <h2>Subsurface Hub</h2>
+                <div class="user-badge">
+                    <i class="fas fa-microchip"></i>&nbsp; Operator: {{ user }}
+                </div>
+            </div>
+            <form method="POST" action="/logout">
+                <button type="submit" class="logout-btn" style="width: auto; padding: 10px 20px; font-size: 0.75rem;">
+                    <i class="fas fa-power-off"></i> Terminate Session
+                </button>
+            </form>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <i class="fas fa-wave-square"></i>
+                <div class="stat-val">8.4</div>
+                <div class="stat-label">Dielectric Constant (εr)</div>
+                <div class="waveform-mock"></div>
+            </div>
+            <div class="stat-card">
+                <i class="fas fa-arrows-up-down"></i>
+                <div class="stat-val">12.5m</div>
+                <div class="stat-label">Current Scan Depth</div>
+                <div class="waveform-mock"></div>
+            </div>
+            <div class="stat-card">
+                <i class="fas fa-bullseye"></i>
+                <div class="stat-val">42</div>
+                <div class="stat-label">Hyperbolas Detected</div>
+                <div class="waveform-mock"></div>
+            </div>
+        </div>
+
+        <div
+            style="margin-top: 30px; padding: 20px; background: rgba(255, 123, 0, 0.05); border: 1px solid rgba(255, 123, 0, 0.2); border-radius: 4px; display: flex; align-items: center; gap: 20px;">
+            <div
+                style="width: 50px; height: 50px; border: 2px solid var(--primary-glow); border-radius: 50%; display: flex; align-items: center; justify-content: center; animation: pulse 2s infinite;">
+                <i class="fas fa-satellite-dish" style="color: var(--primary-glow);"></i>
+            </div>
+            <div>
+                <p style="font-size: 0.8rem; font-family: 'JetBrains Mono', monospace; color: var(--text-main);">LIVE
+                    RADAR FEED ESTABLISHED</p>
+                <p style="font-size: 0.7rem; font-family: 'JetBrains Mono', monospace; color: var(--text-dim);">Signal
+                    Strength: 98% | Frequency: 400MHz</p>
+            </div>
+        </div>
+    </div>
+
+    <style>
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+                opacity: 1;
+            }
+
+            50% {
+                transform: scale(1.1);
+                opacity: 0.7;
+            }
+
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+    </style>
+</body>
+
+</html>

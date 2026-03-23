@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stratum XR (Extended Reality)</title>
+    <link rel="stylesheet" href="static/webstyle.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+
+<body>
+    <!-- Header & Navigation -->
+    <header class="header">
+        <div class="container">
+            <nav class="navbar">
+                <div class="logo-group">
+                    <a href="#" class="logo">Stratum XR</a>
+                    <span class="tagline">Powered by Geo-Intel Lab</span>
+                </div>
+                <ul class="nav-menu">
+                    <li><a href="#home">Home</a></li>
+                    <li><a href="#features">Features</a></li>
+                    <li><a href="#pricing">Pricing</a></li>
+                    <li><a href="#why">Why</a></li>
+                    <li><a href="https://10.26.91.145:5009/login" class="btn btn-login">Log In</a></li>
+                    <li><a href="https://10.26.91.145:5009/register" class="btn btn-primary">Sign Up</a></li>
+                    <li><button id="theme-toggle" class="btn-theme" title="Toggle Dark/Light Mode"><i
+                                class="fas fa-moon"></i></button></li>
+                </ul>
+                <button class="hamburger" id="hamburger">
+                    <i class="fas fa-bars"></i>
+                </button>
+            </nav>
+        </div>
+    </header>
+
+
+    <!-- Hero Section -->
+    <section class="hero" id="home">
+        <div class="container">
+            <div class="hero-main">
+                <div class="hero-content">
+                    <h1 class="hero-title">Visualize the Invisible</h1>
+                    <p class="hero-subtitle">High-performance computing brings subsurface GPR data into real-world
+                        context.</p>
+                </div>
+                <div class="hero-image">
+                    <img src="static/dashboard.png" alt="Stratum XR Interface" class="side-image">
+                </div>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <i class="fas fa-database"></i>
+                    <h3>Handle Large Datasets</h3>
+                    <p>Process data with ease on any computer.</p>
+                </div>
+                <div class="feature-card">
+                    <i class="fas fa-cloud-upload-alt"></i>
+                    <h3>Drag & Drop</h3>
+                    <p>Import data from any GPR instrument.</p>
+                </div>
+                <div class="feature-card">
+                    <i class="fas fa-users"></i>
+                    <h3>Collaborate in Real Time</h3>
+                    <p>Share securely with cloud storage.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Description Section -->
+    <section class="description" id="features">
+        <div class="container">
+            <div class="description-main">
+                <div class="description-image">
+                    <img src="static/viewer2.png" alt="Advanced GPR Analysis" class="side-image-alt">
+                </div>
+                <div class="description-content">
+                    <p class="description-text">Developed to be a complete solution for GPR data Visualization, GPR VR
+                        Explorer is easy to
+                        use yet has all the complex features you need for advanced projects.</p>
+                    <div class="feature-list">
+                        <div class="feature-item">
+                            <i class="fas fa-bolt"></i>
+                            <span>Automated GPR processing</span>
+                        </div>
+                        <div class="feature-item">
+                            <i class="fas fa-link"></i>
+                            <span>Customisable project link sharing</span>
+                        </div>
+                        <div class="feature-item">
+                            <i class="fas fa-highlighter"></i>
+                            <span>Sketching tool for areas of interest</span>
+                        </div>
+                        <div class="feature-item">
+                            <i class="fas fa-shield-alt"></i>
+                            <span>Audited & certified data protection</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Pricing Section -->
+    <section class="pricing" id="pricing">
+        <div class="container">
+            <h2 class="section-title">Paid subscriptions start at just <span class="price-highlight">500 Rs</span>
+                <small>a month</small>
+            </h2>
+            <div class="pricing-cards">
+                <!-- Starter Card -->
+                <div class="pricing-card">
+                    <h3>STARTER</h3>
+                    <div class="price">Free</div>
+                    <ul class="price-features">
+                        <li>Project Size: <strong>10 MB</strong></li>
+                        <li>Total Storage: <strong>100 MB</strong></li>
+                    </ul>
+                    <a href="#" class="btn btn-outline">Select Plan</a>
+                </div>
+                <!-- Core Card -->
+                <div class="pricing-card popular">
+                    <div class="popular-badge">VALUE</div>
+                    <h3>CORE*</h3>
+                    <div class="price">500 Rs<span>/month</span></div>
+                    <div class="billing">Billed Annually</div>
+                    <ul class="price-features">
+                        <li>Project Size: <strong>1 GB</strong></li>
+                        <li>Total Storage: <strong>200 GB</strong></li>
+                    </ul>
+                    <a href="#" class="btn btn-primary">Select Plan</a>
+                </div>
+                <!-- Plus Card -->
+                <div class="pricing-card">
+                    <h3>PLUS*</h3>
+                    <div class="price">1500 Rs<span>/month</span></div>
+                    <div class="billing">Billed Annually</div>
+                    <ul class="price-features">
+                        <li>Project Size: <strong>10 GB</strong></li>
+                        <li>Total Storage: <strong>1000 GB</strong></li>
+                    </ul>
+                    <a href="#" class="btn btn-outline">Select Plan</a>
+                </div>
+                <!-- Ultra Card -->
+                <div class="pricing-card">
+                    <h3>ULTRA*</h3>
+                    <div class="price">2500 Rs<span>/month</span></div>
+                    <div class="billing">Billed Annually</div>
+                    <ul class="price-features">
+                        <li>Project Size: <strong>50 GB</strong></li>
+                        <li>Total Storage: <strong>5000 GB</strong></li>
+                    </ul>
+                    <a href="#" class="btn btn-outline">Select Plan</a>
+                </div>
+            </div>
+
+        </div>
+    </section>
+
+    <!-- Why Section -->
+    <section class="why" id="why">
+        <div class="container">
+            <div class="why-main">
+                <div class="why-content">
+                    <h2 class="section-title">Why was<br>Stratum XR created?</h2>
+                    <p class="why-text">Stratum XR was born from the need to move beyond 2D slices and traditional
+                        top-down views. We wanted to provide a truly immersive way to understand subsurface structures,
+                        making data interpretation more intuitive and collaborative.<br><br>
+                        Traditional tools were limited by hardware and perspective. By leveraging cloud computing and VR
+                        technology, we enable users to walk through their datasets in real-world context, revealing
+                        patterns that were previously hidden in complex GPR signals.</p>
+                </div>
+                <div class="why-image">
+                    <img src="static/viewer3.png" alt="VR Subsurface Walkthrough" class="side-image">
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <p>© 2026 Stratum XR (Extended Reality). All rights reserved.</p>
+            <p>Powered by Geo-Intel Lab</p>
+
+        </div>
+    </footer>
+
+    <script src="static/webscript.js"></script>
+</body>
+
+</html>

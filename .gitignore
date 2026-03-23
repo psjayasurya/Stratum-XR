@@ -1,0 +1,23 @@
+# Ignore specific file types
+static/*.mp4
+static/*.zip
+static/*.ply
+static/*.dxf
+static/*.prj
+static/*.glb
+
+static/potree_lidar/**
+static/uploads/**
+static/gallery/**
+
+
+# Ignore Python cache
+__pycache__/
+*.pyc
+
+# Ignore system files
+*.env
+*.pem
+processed/*
+tiles/*
+uploads/*

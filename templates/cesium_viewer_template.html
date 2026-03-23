@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <title>GPR Cesium 3D Viewer</title>
+    <script src="https://cesium.com/downloads/cesiumjs/releases/1.113/Build/Cesium/Cesium.js"></script>
+    <link href="https://cesium.com/downloads/cesiumjs/releases/1.113/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: sans-serif;
+        }
+
+        #cesiumContainer {
+            width: 100%;
+            height: 100vh;
+        }
+
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 99;
+            background: rgba(30, 30, 30, 0.9);
+            padding: 15px;
+            border-radius: 8px;
+            color: white;
+            width: 300px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+        }
+
+        input,
+        button {
+            width: 100%;
+            margin-bottom: 10px;
+            padding: 8px;
+            box-sizing: border-box;
+        }
+
+        input {
+            background: #333;
+            border: 1px solid #555;
+            color: white;
+        }
+
+        button {
+            background: #3b82f6;
+            border: none;
+            cursor: pointer;
+            color: white;
+            font-weight: bold;
+        }
+
+        button:hover {
+            background: #2563eb;
+        }
+
+        .layer-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 5px;
+            font-size: 12px;
+        }
+
+        .layer-item input {
+            width: auto;
+            margin-right: 8px;
+            margin-bottom: 0;
+        }
+
+        h3 {
+            margin-top: 0;
+        }
+
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #3b82f6;
+            font-size: 24px;
+            font-weight: bold;
+            text-shadow: 0 0 10px black;
+            z-index: 100;
+            pointer-events: none;
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="cesiumContainer"></div>
+    <div id="loading">Loading Point Cloud...</div>
+
+    <div id="ui">
+        <h3>GPR Cesium Viewer</h3>
+        <div>
+            <label style="font-size:11px; color:#aaa;">Cesium ion Token (Required)</label>
+            <input type="password" id="cesiumToken" placeholder="Paste Token (eyJ...)" />
+            <button onclick="initCesium()">Load Globe</button>
+        </div>
+
+        <div id="layers"
+            style="max-height: 300px; overflow-y: auto; display:none; margin-top:10px; border-top:1px solid #444; padding-top:10px;">
+            <div style="font-weight:bold; margin-bottom:5px;">Layers</div>
+        </div>
+
+        <div style="margin-top:10px; font-size:11px; color:#aaa; border-top:1px solid #444; padding-top:10px;">
+            <label>Latitude</label>
+            <input type="number" id="inputLat" step="0.000001" value="0">
+            <label>Longitude</label>
+            <input type="number" id="inputLon" step="0.000001" value="0">
+            <label>Altitude (m)</label>
+            <input type="number" id="inputAlt" step="0.1" value="0">
+            <button onclick="updateLocation()" style="background:#555; margin-top:5px;">Update Location</button>
+            <div
+                style="display:flex; align-items:center; margin-top:10px; padding-top:10px; border-top:1px solid #444;">
+                <input type="checkbox" id="autoRotateCb" onchange="toggleAutoRotate(this.checked)"
+                    style="width:auto; margin:0 5px 0 0;">
+                <label for="autoRotateCb" style="cursor:pointer; user-select:none;">Auto-Rotate 360°</label>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const CESIUM_DATA = [[CESIUM_DATA_JSON]];
+
+        // Try to get token from localStorage
+        const storedToken = localStorage.getItem('cesium_token');
+        if (storedToken) document.getElementById('cesiumToken').value = storedToken;
+
+        let viewer;
+        const pointPrimitives = [];
+        let centerPoint = null; // Target for rotation
+        let isRotating = false;
+
+        async function initCesium() {
+            const token = document.getElementById('cesiumToken').value;
+            if (!token) { alert("Please enter a Cesium ion Token."); return; }
+
+            localStorage.setItem('cesium_token', token);
+            Cesium.Ion.defaultAccessToken = token;
+
+            // Remove existing if any
+            if (viewer) { viewer.destroy(); }
+
+            try {
+                // Initialize Viewer without terrain first
+                viewer = new Cesium.Viewer('cesiumContainer', {
+                    animation: false,
+                    timeline: false,
+                    baseLayerPicker: true
+                });
+
+                // Add Rotation Listener
+                viewer.clock.onTick.addEventListener(function (clock) {
+                    if (isRotating && centerPoint) {
+                        viewer.camera.rotate(centerPoint, 0.002); // 0.002 radians per tick
+                    }
+                });
+
+
+                // Load Terrain Async
+                try {
+                    const terrainProvider = await Cesium.Terrain.fromWorldTerrain();
+                    viewer.terrainProvider = terrainProvider;
+                } catch (err) {
+                    console.error("Terrain load warning:", err);
+                    // Continue even if terrain fails (viewer will use ellipsoid)
+                }
+
+                document.getElementById('layers').style.display = 'block';
+                loadGPRData();
+            } catch (e) {
+                alert("Error initializing Cesium. Check console.");
+                console.error(e);
+            }
+        }
+
+        async function loadGPRData() {
+            const layersDiv = document.getElementById('layers');
+            layersDiv.innerHTML = '<div style="font-weight:bold; margin-bottom:5px;">Layers</div>';
+            document.getElementById('loading').style.display = 'block';
+
+            // Get Geo-Anchor
+            // Use URL Params if available, else [[GEO_ANCHOR]]
+            const params = new URLSearchParams(window.location.search);
+            let originLat = parseFloat(params.get('lat'));
+            let originLon = parseFloat(params.get('lon'));
+            let originAlt = parseFloat(params.get('alt'));
+
+            if (isNaN(originLat) || isNaN(originLon)) {
+                // Fallback to Server Injection
+                const anchorRaw = "[[GEO_ANCHOR]]";
+                const parts = anchorRaw.split(',').map(s => parseFloat(s.trim()));
+                originLat = parts[0] || 0;
+                originLon = parts[1] || 0;
+                originAlt = parts[2] || 0;
+            }
+
+            // Update Inputs
+            document.getElementById('inputLat').value = originLat;
+            document.getElementById('inputLon').value = originLon;
+            document.getElementById('inputAlt').value = originAlt || 0;
+
+            if (originLat === 0 && originLon === 0) {
+                console.warn("Geo-Reference Anchor is (0,0). Data will be at Null Island.");
+                // We won't alert anymore, just let the user see 0,0 in the inputs
+            }
+
+            // Cartesian origin
+            const center = Cesium.Cartesian3.fromDegrees(originLon, originLat, originAlt);
+            centerPoint = center; // Store for rotation
+
+            // Local East-North-Up frame at origin
+            const transformMatrix = Cesium.Transforms.eastNorthUpToFixedFrame(center);
+
+            // Clear previous
+            viewer.scene.primitives.removeAll();
+
+            const pointsCollection = viewer.scene.primitives.add(new Cesium.PointPrimitiveCollection());
+
+            for (let i = 0; i < CESIUM_DATA.ply_files.length; i++) {
+                const fileEntry = CESIUM_DATA.ply_files[i];
+                const url = `/files/${CESIUM_DATA.job_id}/${fileEntry.filename}`;
+
+                try {
+                    const response = await fetch(url);
+                    const text = await response.text();
+
+                    const points = parsePLY(text);
+
+                    const primitives = [];
+                    const color = Cesium.Color.fromCssColorString(fileEntry.color);
+
+                    points.forEach(pt => {
+                        // Point in local meters (x=East, y=North, z=Up/Down)
+                        // GPR Data: x, y, z. Check orientation.
+                        // In VR Viewer: x=East, y=North, z=Depth?
+                        // Wait, VR Viewer uses: MainGroup rotated -90 X.
+                        // In Python: x, y, z are local coords.
+                        // Usually x, y are planar, z is depth (negative).
+
+                        // Let's assume input x, y, z match East, North, Up (relative).
+                        const x = pt.x;
+                        const y = pt.y; // If y is North
+                        const z = pt.z; // If z is altitude relative to anchor
+
+                        // Transform local (x, y, z) to World Cartesian
+                        const localPos = new Cesium.Cartesian3(x, y, z);
+                        // We need to apply the rotation/translation of the local frame
+                        // Simple approximation for small area:
+                        // World = Center + (East * x) + (North * y) + (Up * z)
+                        // Cesium "Matrix4.multiplyByPoint" with eastNorthUpToFixedFrame does this
+
+                        const worldPos = new Cesium.Matrix4.multiplyByPoint(transformMatrix, localPos, new Cesium.Cartesian3());
+
+                        const p = pointsCollection.add({
+                            position: worldPos,
+                            color: color,
+                            pixelSize: 4,
+                            scaleByDistance: new Cesium.NearFarScalar(1.5e2, 2.0, 1.5e7, 0.5)
+                        });
+
+                        // Tag for toggling
+                        p._layerIndex = i;
+                        primitives.push(p);
+                    });
+
+                    // Only add UI checkbox if it doesn't exist (loading might be called multiple times)
+                    if (document.getElementById(`layer_cb_${i}`) == null) {
+                        const row = document.createElement('div');
+                        row.className = 'layer-item';
+                        row.innerHTML = `
+                            <input type="checkbox" id="layer_cb_${i}" checked onchange="toggleLayer(${i}, this.checked)">
+                            <span style="width:10px; height:10px; background:${fileEntry.color}; margin-right:5px; display:inline-block;"></span>
+                            Layer ${i + 1}
+                        `;
+                        layersDiv.appendChild(row);
+                    }
+
+                } catch (e) {
+                    console.error("Failed to load " + fileEntry.filename, e);
+                }
+            }
+
+            document.getElementById('loading').style.display = 'none';
+            viewer.camera.flyTo({
+                destination: Cesium.Cartesian3.fromDegrees(originLon, originLat, originAlt + 100)
+            });
+        }
+
+        function updateLocation() {
+            const lat = parseFloat(document.getElementById('inputLat').value);
+            const lon = parseFloat(document.getElementById('inputLon').value);
+            const alt = parseFloat(document.getElementById('inputAlt').value);
+
+            // Re-load with new anchor
+            // We need to pass these values to a reload function
+            // Simpler: Just re-run the transform logic?
+            // loadGPRData parses URL/Replacements. We need to override that.
+
+            // Hack: Update the inputs (already done) and call a modified load function?
+            // Better: modify loadGPRData to check inputs first if they are not 0?
+            // Actually, let's just make loadGPRData accept args or read from inputs if set.
+
+            // Let's reload the page with new params? No, that's slow.
+            // Let's clear primitives and re-render.
+
+            // Update URL params without reload for shareability
+            const url = new URL(window.location);
+            url.searchParams.set('lat', lat);
+            url.searchParams.set('lon', lon);
+            url.searchParams.set('alt', alt);
+            window.history.pushState({}, '', url);
+
+            // Re-run
+            document.getElementById('layers').innerHTML = '<div style="font-weight:bold; margin-bottom:5px;">Layers</div>';
+            viewer.scene.primitives.removeAll();
+
+            // We need to call loadGPRData but prevent it from re-reading the old defaults if inputs have values.
+            // Actually, loadGPRData reads from URL params in my previous code!
+            // I just updated the URL params above. So calling it again should work!
+            loadGPRData();
+        }
+
+        window.toggleLayer = function (index, checked) {
+            const primitives = viewer.scene.primitives;
+            const collection = primitives.get(0); // Assuming it's the first one we added
+            if (!collection) return;
+
+            const len = collection.length;
+            for (let k = 0; k < len; ++k) {
+                const p = collection.get(k);
+                if (p._layerIndex === index) {
+                    p.show = checked;
+                }
+            }
+        };
+
+        function parsePLY(text) {
+            const lines = text.split('\n');
+            let headerEndIndex = 0;
+            for (let i = 0; i < lines.length; i++) {
+                if (lines[i].includes('end_header')) {
+                    headerEndIndex = i + 1;
+                    break;
+                }
+            }
+
+            const points = [];
+            for (let i = headerEndIndex; i < lines.length; i++) {
+                const line = lines[i].trim();
+                if (line === '') continue;
+                const parts = line.split(/\s+/);
+                if (parts.length >= 3) {
+                    points.push({
+                        x: parseFloat(parts[0]),
+                        y: parseFloat(parts[1]),
+                        z: parseFloat(parts[2])
+                    });
+                }
+            }
+            return points;
+        }
+
+        function toggleAutoRotate(checked) {
+            isRotating = checked;
+        }
+
+    </script>
+</body>
+
+</html>
+```

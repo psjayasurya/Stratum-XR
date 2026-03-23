@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StrataVerse | Verify OTP</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+
+<body>
+    <div class="grid-bg"></div>
+    <div class="map-overlay"></div>
+    <div class="scan-line"></div>
+
+    <div class="container">
+        <div class="logo-container">
+            <img src="/static/logo.jpeg" alt="StrataVerse" class="logo">
+        </div>
+        <h2>Verify Reset Code</h2>
+        <p class="subtitle">Enter the 6-digit code sent to {{ email }}</p>
+
+        {% if error %}
+        <div class="error-msg">
+            <i class="fas fa-exclamation-circle"></i> {{ error }}
+        </div>
+        {% endif %}
+
+        <form method="POST" action="/verify-reset-otp">
+            <input type="hidden" name="email" value="{{ email }}">
+
+            <div class="form-group">
+                <i class="fas fa-key"></i>
+                <input type="text" name="otp" placeholder="6-digit reset code" required maxlength="6"
+                    inputmode="numeric">
+            </div>
+
+            <button type="submit">
+                <i class="fas fa-check-circle"></i> Verify Code
+            </button>
+        </form>
+
+        <div class="footer-links">
+            <p>Back to <a href="/forgot-password">Resend</a></p>
+        </div>
+    </div>
+</body>
+
+</html>

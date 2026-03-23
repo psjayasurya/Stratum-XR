@@ -1,0 +1,1093 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stratum XR – VR Controller Tutorial</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --primary: #3b82f6;
+            --accent: #10b981;
+            --accent2: #8b5cf6;
+            --warn: #f59e0b;
+            --danger: #ef4444;
+            --bg: #080b14;
+            --glass: rgba(255,255,255,0.04);
+            --glass-border: rgba(255,255,255,0.10);
+            --text: #e2e8f0;
+            --muted: #64748b;
+            --highlight: #fbbf24;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ─────────── STARFIELD BG ─────────── */
+        #starfield {
+            position: fixed; inset: 0; z-index: 0;
+            background: radial-gradient(ellipse at 30% 20%, rgba(59,130,246,0.08) 0%, transparent 60%),
+                        radial-gradient(ellipse at 70% 80%, rgba(139,92,246,0.08) 0%, transparent 60%),
+                        radial-gradient(ellipse at 50% 50%, rgba(16,185,129,0.04) 0%, transparent 70%),
+                        #080b14;
+        }
+        .star {
+            position: absolute;
+            background: #fff;
+            border-radius: 50%;
+            animation: twinkle var(--dur, 3s) var(--delay, 0s) infinite ease-in-out alternate;
+        }
+        @keyframes twinkle { from { opacity: 0.1; } to { opacity: 0.9; } }
+
+        /* ─────────── SKIP BUTTON ─────────── */
+        #skip-btn {
+            position: fixed; top: 20px; right: 24px; z-index: 9999;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid var(--glass-border);
+            color: var(--muted);
+            padding: 8px 20px;
+            border-radius: 50px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.25s;
+            display: flex; align-items: center; gap: 8px;
+            backdrop-filter: blur(12px);
+        }
+        #skip-btn:hover {
+            background: rgba(239,68,68,0.15);
+            border-color: var(--danger);
+            color: var(--danger);
+        }
+
+        /* ─────────── PROGRESS BAR ─────────── */
+        #progress-wrap {
+            position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 9998;
+            background: rgba(255,255,255,0.05);
+        }
+        #progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary), var(--accent));
+            transition: width 0.6s cubic-bezier(0.4,0,0.2,1);
+            box-shadow: 0 0 8px rgba(59,130,246,0.6);
+        }
+
+        /* ─────────── STEP COUNTER ─────────── */
+        #step-counter {
+            position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+            z-index: 9997;
+            font-size: 12px; font-weight: 600;
+            color: var(--muted);
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        /* ─────────── MAIN LAYOUT ─────────── */
+        #tutorial-wrap {
+            position: relative; z-index: 10;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 60px 24px 24px;
+            gap: 0;
+        }
+
+        /* ─────────── TITLE AREA ─────────── */
+        #step-title {
+            font-size: clamp(22px, 4vw, 36px);
+            font-weight: 800;
+            text-align: center;
+            margin-bottom: 6px;
+            background: linear-gradient(135deg, #fff 0%, var(--accent) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            min-height: 50px;
+            transition: opacity 0.4s;
+        }
+        #step-subtitle {
+            font-size: 15px;
+            color: var(--muted);
+            text-align: center;
+            margin-bottom: 20px;
+            min-height: 24px;
+            transition: opacity 0.4s;
+        }
+
+        /* ─────────── 3D CANVAS ─────────── */
+        #controller-canvas {
+            width: min(92vw, 680px);
+            height: min(45vh, 360px);
+            border-radius: 20px;
+            background: transparent;
+            display: block;
+            cursor: grab;
+        }
+        #controller-canvas:active { cursor: grabbing; }
+
+        /* ─────────── HIGHLIGHT LABEL ─────────── */
+        #highlight-label {
+            margin-top: 12px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: var(--glass);
+            border: 1px solid var(--glass-border);
+            border-radius: 14px;
+            padding: 12px 22px;
+            backdrop-filter: blur(12px);
+            min-height: 60px;
+            width: min(92vw, 560px);
+            transition: opacity 0.4s;
+        }
+        #highlight-icon {
+            width: 42px; height: 42px;
+            border-radius: 12px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 20px;
+            flex-shrink: 0;
+            transition: background 0.4s;
+        }
+        #highlight-text {
+            flex: 1;
+        }
+        #highlight-name {
+            font-size: 14px;
+            font-weight: 700;
+            color: #fff;
+            margin-bottom: 3px;
+        }
+        #highlight-desc {
+            font-size: 12px;
+            color: var(--muted);
+            line-height: 1.5;
+        }
+
+        /* ─────────── VOICEOVER STATUS ─────────── */
+        #voiceover-bar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 10px;
+            font-size: 12px;
+            color: var(--muted);
+            min-height: 24px;
+        }
+        .vo-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background: var(--accent);
+            animation: pulse-dot 1.2s infinite ease-in-out;
+        }
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 0.3; transform: scale(0.8); }
+            50% { opacity: 1; transform: scale(1.2); }
+        }
+
+        /* ─────────── NAV BUTTONS ─────────── */
+        #nav-buttons {
+            display: flex;
+            gap: 14px;
+            margin-top: 18px;
+        }
+        .nav-tut-btn {
+            padding: 12px 28px;
+            border-radius: 50px;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.25s;
+            border: none;
+            display: flex; align-items: center; gap: 8px;
+        }
+        #btn-prev {
+            background: var(--glass);
+            border: 1px solid var(--glass-border);
+            color: var(--muted);
+        }
+        #btn-prev:hover:not(:disabled) {
+            background: rgba(255,255,255,0.10);
+            color: #fff;
+        }
+        #btn-prev:disabled { opacity: 0.3; cursor: default; }
+        #btn-next {
+            background: linear-gradient(135deg, var(--primary), var(--accent2));
+            color: #fff;
+            box-shadow: 0 4px 24px rgba(59,130,246,0.35);
+        }
+        #btn-next:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 32px rgba(59,130,246,0.5);
+        }
+        #btn-next:active { transform: translateY(0); }
+
+        /* ─────────── STEP DOTS ─────────── */
+        #step-dots {
+            display: flex;
+            gap: 8px;
+            margin-top: 16px;
+        }
+        .step-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.15);
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+        .step-dot.active {
+            background: var(--accent);
+            width: 24px;
+            border-radius: 4px;
+            box-shadow: 0 0 8px rgba(16,185,129,0.5);
+        }
+
+        /* ─────────── SLIDE ANIMATIONS ─────────── */
+        .fade-out { opacity: 0; transform: translateY(10px); transition: all 0.3s ease; }
+        .fade-in  { opacity: 1; transform: translateY(0);    transition: all 0.3s ease; }
+
+        /* ─────────── FINISH SCREEN ─────────── */
+        #finish-screen {
+            display: none;
+            position: fixed; inset: 0; z-index: 9995;
+            background: radial-gradient(ellipse at center, rgba(16,185,129,0.15) 0%, transparent 70%), var(--bg);
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            animation: fadeIn 0.5s ease;
+        }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        #finish-screen.visible { display: flex; }
+        .finish-icon {
+            font-size: 80px;
+            margin-bottom: 24px;
+            animation: popIn 0.6s cubic-bezier(0.18,0.89,0.32,1.28);
+        }
+        @keyframes popIn { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        .finish-title {
+            font-size: 42px;
+            font-weight: 800;
+            background: linear-gradient(135deg, #fff, var(--accent));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 12px;
+            text-align: center;
+        }
+        .finish-sub {
+            font-size: 16px;
+            color: var(--muted);
+            text-align: center;
+            max-width: 420px;
+            line-height: 1.6;
+            margin-bottom: 36px;
+        }
+        .finish-btn {
+            padding: 16px 40px;
+            background: linear-gradient(135deg, var(--accent), #059669);
+            color: #fff;
+            border: none;
+            border-radius: 50px;
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: 0 8px 32px rgba(16,185,129,0.4);
+            transition: all 0.25s;
+            display: flex; align-items: center; gap: 10px;
+        }
+        .finish-btn:hover { transform: translateY(-3px); box-shadow: 0 12px 40px rgba(16,185,129,0.5); }
+
+        /* ─────────── BUTTON PULSE RING ─────────── */
+        @keyframes ring-pulse {
+            0% { opacity: 0.8; transform: scale(1); }
+            100% { opacity: 0; transform: scale(2.5); }
+        }
+
+        /* ─────────── VOICEOVER TOGGLE ─────────── */
+        #vo-toggle {
+            position: fixed; top: 20px; left: 24px; z-index: 9999;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid var(--glass-border);
+            color: var(--muted);
+            padding: 8px 16px;
+            border-radius: 50px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.25s;
+            display: flex; align-items: center; gap: 8px;
+            backdrop-filter: blur(12px);
+        }
+        #vo-toggle:hover { background: rgba(16,185,129,0.1); border-color: var(--accent); color: var(--accent); }
+        #vo-toggle.muted { color: #ef4444; border-color: rgba(239,68,68,0.4); }
+    </style>
+</head>
+<body>
+
+<!-- Starfield -->
+<div id="starfield"></div>
+
+<!-- Progress -->
+<div id="progress-wrap"><div id="progress-bar" style="width:0%"></div></div>
+
+<!-- Step counter -->
+<div id="step-counter">Step 1 of 9</div>
+
+<!-- Voiceover toggle -->
+<button id="vo-toggle" onclick="toggleVoiceover()">
+    <i class="fas fa-volume-up" id="vo-icon"></i> Voice
+</button>
+
+<!-- Skip button -->
+<button id="skip-btn" onclick="skipTutorial()">
+    Skip Tutorial <i class="fas fa-forward"></i>
+</button>
+
+<!-- Main tutorial content -->
+<div id="tutorial-wrap">
+    <div id="step-title">Welcome to Stratum XR VR</div>
+    <div id="step-subtitle">Let's learn how to use your VR controllers</div>
+
+    <canvas id="controller-canvas"></canvas>
+
+    <div id="highlight-label">
+        <div id="highlight-icon" style="background:rgba(16,185,129,0.15)">
+            <i class="fas fa-gamepad" style="color:#10b981"></i>
+        </div>
+        <div id="highlight-text">
+            <div id="highlight-name">Meta Quest Controllers</div>
+            <div id="highlight-desc">Realistic 3D controllers — hover to explore, drag to rotate</div>
+        </div>
+    </div>
+
+    <div id="voiceover-bar">
+        <div class="vo-dot" id="vo-dot" style="display:none"></div>
+        <span id="vo-text">Press Next to begin the tour</span>
+    </div>
+
+    <div id="nav-buttons">
+        <button class="nav-tut-btn" id="btn-prev" onclick="prevStep()" disabled>
+            <i class="fas fa-arrow-left"></i> Back
+        </button>
+        <button class="nav-tut-btn" id="btn-next" onclick="nextStep()">
+            Next <i class="fas fa-arrow-right"></i>
+        </button>
+    </div>
+
+    <div id="step-dots"></div>
+</div>
+
+<!-- Finish screen -->
+<div id="finish-screen">
+    <div class="finish-icon">🎉</div>
+    <div class="finish-title">You're Ready!</div>
+    <div class="finish-sub">You've learned all the VR controller functions. Put on your headset and start exploring GPR data in immersive 3D!</div>
+    <button class="finish-btn" onclick="closeTutorial()">
+        <i class="fas fa-vr-cardboard"></i> Enter VR Viewer
+    </button>
+</div>
+
+<!-- Three.js -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.158.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+
+// ═══════════════════════════════════════════════════════════════
+//  TUTORIAL STEPS DATA
+// ═══════════════════════════════════════════════════════════════
+const STEPS = [
+  {
+    title: "Welcome to Stratum XR VR",
+    subtitle: "Your guide to VR controller mastery",
+    highlightPart: null,
+    highlightIcon: "fa-gamepad",
+    highlightColor: "#10b981",
+    highlightBg: "rgba(16,185,129,0.15)",
+    highlightName: "Meta Quest Controllers",
+    highlightDesc: "Interactive 3D controllers — drag to rotate, watch each button light up",
+    voiceover: "Welcome to Stratum XR, the ground-penetrating radar VR viewer. This tutorial will guide you through all the controls you need to explore underground data in virtual reality.",
+    camTarget: { x: 0, y: 0, z: 5 }
+  },
+  {
+    title: "Trigger Button",
+    subtitle: "Primary action and selection",
+    highlightPart: "trigger",
+    highlightIcon: "fa-hand-pointer",
+    highlightColor: "#3b82f6",
+    highlightBg: "rgba(59,130,246,0.15)",
+    highlightName: "🔵 Trigger (Index Finger)",
+    highlightDesc: "Press & hold to grab and drag the GPR model. Click to place measurement points in ruler mode. Select UI elements in the VR menu.",
+    voiceover: "The trigger button is located under your index finger. Press and hold it to grab and drag the GPR point cloud model, or click it to interact with the user interface and place measurement markers.",
+    camTarget: { x: -0.6, y: -0.3, z: 4 }
+  },
+  {
+    title: "Grip Button",
+    subtitle: "Model grab & two-hand scale",
+    highlightPart: "grip",
+    highlightIcon: "fa-hand-rock",
+    highlightColor: "#8b5cf6",
+    highlightBg: "rgba(139,92,246,0.15)",
+    highlightName: "🟣 Grip (Side Button)",
+    highlightDesc: "Hold the grip on both controllers to scale the GPR model with a pinch gesture. Great for zooming into specific subsurface anomalies.",
+    voiceover: "The grip button sits on the side of the controller. Hold both grips simultaneously and move your hands apart to scale up, or together to scale down the GPR data model.",
+    camTarget: { x: 0.5, y: -0.2, z: 4 }
+  },
+  {
+    title: "Thumbstick (Left)",
+    subtitle: "Locomotion — move through the scene",
+    highlightPart: "thumbstick_left",
+    highlightIcon: "fa-arrows-alt",
+    highlightColor: "#10b981",
+    highlightBg: "rgba(16,185,129,0.15)",
+    highlightName: "🟢 Left Thumbstick — Move",
+    highlightDesc: "Push forward/back to walk deeper or step back. Push left/right to strafe sideways through the GPR survey area.",
+    voiceover: "The left thumbstick controls your movement. Push forward to move deeper into the scene, backwards to retreat, and side to side to strafe. Explore the full extent of your GPR survey grid.",
+    camTarget: { x: -1.2, y: 0.2, z: 4 }
+  },
+  {
+    title: "Thumbstick (Right)",
+    subtitle: "Look around — smooth rotation",
+    highlightPart: "thumbstick_right",
+    highlightIcon: "fa-sync-alt",
+    highlightColor: "#f59e0b",
+    highlightBg: "rgba(245,158,11,0.15)",
+    highlightName: "🟠 Right Thumbstick — Rotate View",
+    highlightDesc: "Push left/right to snap-rotate your view in 45° increments. Push forward/back to adjust your VR height offset.",
+    voiceover: "The right thumbstick rotates your view. Push left or right to snap your perspective in 45 degree turns, which is comfortable in VR. Push forward or backward to elevate or lower your virtual position.",
+    camTarget: { x: 1.2, y: 0.2, z: 4 }
+  },
+  {
+    title: "A & B Buttons (Right)",
+    subtitle: "Quick actions and layer control",
+    highlightPart: "ab_buttons",
+    highlightIcon: "fa-circle",
+    highlightColor: "#ef4444",
+    highlightBg: "rgba(239,68,68,0.15)",
+    highlightName: "🔴 A / B Buttons",
+    highlightDesc: "A Button: Toggle the info panel visibility. B Button: Cycle through color palettes for the GPR amplitude data.",
+    voiceover: "The A and B buttons on your right controller are quick-access shortcuts. Press A to toggle the information panel. Press B to cycle through different color palettes, helping you visualize subsurface anomalies more clearly.",
+    camTarget: { x: 1.0, y: 0.4, z: 3.5 }
+  },
+  {
+    title: "X & Y Buttons (Left)",
+    subtitle: "Menu & annotation tools",
+    highlightPart: "xy_buttons",
+    highlightIcon: "fa-square",
+    highlightColor: "#6366f1",
+    highlightBg: "rgba(99,102,241,0.15)",
+    highlightName: "🔵 X / Y Buttons",
+    highlightDesc: "X Button: Open/close the main VR control panel. Y Button: Toggle ruler/measurement mode on and off.",
+    voiceover: "The X and Y buttons on your left controller open key features. Press X to bring up the main control panel where you can adjust all GPR visualization settings. Press Y to activate the ruler tool, allowing you to measure distances and depths in the GPR data.",
+    camTarget: { x: -1.0, y: 0.4, z: 3.5 }
+  },
+  {
+    title: "Menu Button",
+    subtitle: "Back and system options",
+    highlightPart: "menu_button",
+    highlightIcon: "fa-bars",
+    highlightColor: "#64748b",
+    highlightBg: "rgba(100,116,139,0.15)",
+    highlightName: "☰ Menu Button",
+    highlightDesc: "Opens the system overlay menu. Use it to return to the main lobby, access settings, or submit a support ticket.",
+    voiceover: "The menu button opens the system overlay. From here you can return to the main dashboard, access application settings, or log out of the session.",
+    camTarget: { x: -0.8, y: 0.6, z: 3.8 }
+  },
+  {
+    title: "You're All Set!",
+    subtitle: "Put on your headset and explore underground worlds",
+    highlightPart: null,
+    highlightIcon: "fa-vr-cardboard",
+    highlightColor: "#10b981",
+    highlightBg: "rgba(16,185,129,0.15)",
+    highlightName: "🎉 Ready to Explore",
+    highlightDesc: "All controller functions learned! Enter VR mode and start analyzing subsurface GPR data in three dimensions.",
+    voiceover: "Congratulations! You have completed the controller tutorial. You now know every button and its function. Put on your Meta Quest headset and experience ground-penetrating radar data in full immersive three-dimensional virtual reality. Good luck with your survey!",
+    camTarget: { x: 0, y: 0, z: 5 }
+  }
+];
+
+// ═══════════════════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════════════════
+let currentStep = 0;
+let voEnabled = true;
+let speaking = false;
+let animFrame = null;
+
+// ═══════════════════════════════════════════════════════════════
+//  STARFIELD
+// ═══════════════════════════════════════════════════════════════
+function buildStars() {
+    const sf = document.getElementById('starfield');
+    for (let i = 0; i < 120; i++) {
+        const s = document.createElement('div');
+        s.className = 'star';
+        const sz = Math.random() * 2 + 0.5;
+        s.style.cssText = `
+            width:${sz}px; height:${sz}px;
+            top:${Math.random()*100}%; left:${Math.random()*100}%;
+            --dur:${2+Math.random()*4}s; --delay:${Math.random()*4}s;
+        `;
+        sf.appendChild(s);
+    }
+}
+buildStars();
+
+// ═══════════════════════════════════════════════════════════════
+//  THREE.JS CONTROLLER SCENE
+// ═══════════════════════════════════════════════════════════════
+const canvas = document.getElementById('controller-canvas');
+const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(canvas.clientWidth, canvas.clientHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.2;
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(45, canvas.clientWidth / canvas.clientHeight, 0.01, 100);
+camera.position.set(0, 0.5, 5);
+camera.lookAt(0, 0, 0);
+
+// Lighting
+const ambient = new THREE.AmbientLight(0x223344, 1.5);
+scene.add(ambient);
+const key = new THREE.DirectionalLight(0x88bbff, 3.5);
+key.position.set(3, 5, 4);
+key.castShadow = true;
+scene.add(key);
+const fill = new THREE.DirectionalLight(0x44ffaa, 1.5);
+fill.position.set(-3, 2, -2);
+scene.add(fill);
+const rim = new THREE.DirectionalLight(0xffffff, 1.0);
+rim.position.set(0, -3, -4);
+scene.add(rim);
+
+// Accent glow point lights
+const glow1 = new THREE.PointLight(0x3b82f6, 2, 8);
+glow1.position.set(-2, 1, 2);
+scene.add(glow1);
+const glow2 = new THREE.PointLight(0x10b981, 2, 8);
+glow2.position.set(2, 1, 2);
+scene.add(glow2);
+
+// Controller group
+const controllerGroup = new THREE.Group();
+scene.add(controllerGroup);
+
+// ─── Materials ───
+const bodyMat = new THREE.MeshStandardMaterial({
+    color: 0x1a1a2e,
+    roughness: 0.3,
+    metalness: 0.6,
+    envMapIntensity: 1.0
+});
+const accentMat = new THREE.MeshStandardMaterial({
+    color: 0x2d2d4e,
+    roughness: 0.4,
+    metalness: 0.5
+});
+const buttonMat = new THREE.MeshStandardMaterial({
+    color: 0x333355,
+    roughness: 0.5,
+    metalness: 0.3
+});
+const ringMat = new THREE.MeshStandardMaterial({
+    color: 0x888899,
+    roughness: 0.2,
+    metalness: 0.9,
+    emissive: 0x111122,
+    emissiveIntensity: 0.2
+});
+
+// ─── Build one controller ───
+function buildController(isLeft) {
+    const group = new THREE.Group();
+    const side = isLeft ? -1 : 1;
+
+    // Main body — elongated capsule shape
+    const bodyGeo = new THREE.CapsuleGeometry(0.09, 0.22, 12, 24);
+    const body = new THREE.Mesh(bodyGeo, bodyMat.clone());
+    body.rotation.x = Math.PI * 0.15;
+    body.castShadow = true;
+    group.add(body);
+    body.userData.part = 'body';
+
+    // Handle extension
+    const handleGeo = new THREE.CylinderGeometry(0.055, 0.04, 0.28, 20);
+    const handle = new THREE.Mesh(handleGeo, accentMat.clone());
+    handle.position.y = -0.22;
+    handle.rotation.x = 0.3;
+    handle.castShadow = true;
+    group.add(handle);
+
+    // Tracking ring
+    const ringGeo = new THREE.TorusGeometry(0.14, 0.012, 16, 60);
+    const ring = new THREE.Mesh(ringGeo, ringMat.clone());
+    ring.position.y = 0.06;
+    ring.rotation.x = Math.PI * 0.5;
+    group.add(ring);
+    ring.userData.part = 'ring';
+
+    // Trigger
+    const trigGeo = new THREE.BoxGeometry(0.028, 0.055, 0.04);
+    const trigger = new THREE.Mesh(trigGeo, buttonMat.clone());
+    trigger.position.set(side * 0.025, -0.04, 0.07);
+    trigger.rotation.x = -0.6;
+    trigger.castShadow = true;
+    group.add(trigger);
+    trigger.userData.part = 'trigger';
+
+    // Grip bumper (side)
+    const gripGeo = new THREE.CapsuleGeometry(0.018, 0.08, 8, 16);
+    const grip = new THREE.Mesh(gripGeo, buttonMat.clone());
+    grip.position.set(side * 0.09, -0.08, 0.02);
+    grip.rotation.z = Math.PI * 0.5;
+    group.add(grip);
+    grip.userData.part = 'grip';
+
+    // Thumbstick
+    const stickBaseGeo = new THREE.CylinderGeometry(0.025, 0.025, 0.01, 20);
+    const stickBase = new THREE.Mesh(stickBaseGeo, accentMat.clone());
+    stickBase.position.set(isLeft ? -0.03 : 0.03, 0.04, 0.02);
+    group.add(stickBase);
+
+    const stickGeo = new THREE.CylinderGeometry(0.012, 0.016, 0.028, 16);
+    const stick = new THREE.Mesh(stickGeo, buttonMat.clone());
+    stick.position.copy(stickBase.position);
+    stick.position.y += 0.02;
+    group.add(stick);
+    stick.userData.part = isLeft ? 'thumbstick_left' : 'thumbstick_right';
+
+    // Top hat / cap of stick
+    const hatGeo = new THREE.CylinderGeometry(0.018, 0.012, 0.006, 16);
+    const hat = new THREE.Mesh(hatGeo, new THREE.MeshStandardMaterial({ color: 0x555577, roughness: 0.6, metalness: 0.2 }));
+    hat.position.copy(stick.position);
+    hat.position.y += 0.016;
+    group.add(hat);
+    hat.userData.part = isLeft ? 'thumbstick_left' : 'thumbstick_right';
+
+    // Face buttons (A/B or X/Y)
+    const btnLabels = isLeft ? ['X','Y'] : ['A','B'];
+    const btnColors = isLeft ? [0x4466ff, 0x66ff88] : [0xff6666, 0x66aaff];
+    const btnPositions = [
+        { x: side * 0.055, y: 0.06, z: 0.01 },
+        { x: side * 0.032, y: 0.085, z: 0.0 }
+    ];
+    const faceButtons = [];
+    btnPositions.forEach((pos, i) => {
+        const btnGeo = new THREE.CylinderGeometry(0.014, 0.014, 0.01, 20);
+        const mat = new THREE.MeshStandardMaterial({ color: btnColors[i], roughness: 0.4, metalness: 0.3, emissive: btnColors[i], emissiveIntensity: 0.05 });
+        const btn = new THREE.Mesh(btnGeo, mat);
+        btn.position.set(pos.x, pos.y, pos.z);
+        btn.rotation.x = -0.3;
+        group.add(btn);
+        btn.userData.part = isLeft ? 'xy_buttons' : 'ab_buttons';
+        btn.userData.label = btnLabels[i];
+        faceButtons.push(btn);
+    });
+
+    // Menu button (small, left only)
+    if (isLeft) {
+        const menuGeo = new THREE.CylinderGeometry(0.008, 0.008, 0.006, 16);
+        const menuBtn = new THREE.Mesh(menuGeo, new THREE.MeshStandardMaterial({ color: 0x888899, roughness: 0.5, metalness: 0.3 }));
+        menuBtn.position.set(-0.055, 0.07, 0.01);
+        group.add(menuBtn);
+        menuBtn.userData.part = 'menu_button';
+    }
+
+    // Finger pad / touchpad area (cosmetic)
+    const padGeo = new THREE.CircleGeometry(0.018, 24);
+    const padMat = new THREE.MeshStandardMaterial({ color: 0x222233, roughness: 0.8, metalness: 0.1 });
+    const pad = new THREE.Mesh(padGeo, padMat);
+    pad.position.set(isLeft ? 0.02 : -0.02, 0.0, 0.085);
+    pad.rotation.x = -1.1;
+    group.add(pad);
+
+    // Wrist strap connector
+    const wristGeo = new THREE.CylinderGeometry(0.012, 0.012, 0.05, 12);
+    const wristMat = new THREE.MeshStandardMaterial({ color: 0x111122, roughness: 0.9, metalness: 0.1 });
+    const wrist = new THREE.Mesh(wristGeo, wristMat);
+    wrist.position.set(0, -0.38, 0);
+    group.add(wrist);
+
+    return { group, faceButtons };
+}
+
+const leftCtrl = buildController(true);
+leftCtrl.group.position.set(-1.0, 0, 0);
+leftCtrl.group.rotation.set(-0.1, 0.3, 0.1);
+controllerGroup.add(leftCtrl.group);
+
+const rightCtrl = buildController(false);
+rightCtrl.group.position.set(1.0, 0, 0);
+rightCtrl.group.rotation.set(-0.1, -0.3, -0.1);
+controllerGroup.add(rightCtrl.group);
+
+// ─── Particle field around controllers ───
+const particleGeo = new THREE.BufferGeometry();
+const pCount = 200;
+const pPos = new Float32Array(pCount * 3);
+for (let i = 0; i < pCount; i++) {
+    pPos[i*3]   = (Math.random() - 0.5) * 6;
+    pPos[i*3+1] = (Math.random() - 0.5) * 4;
+    pPos[i*3+2] = (Math.random() - 0.5) * 4;
+}
+particleGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+const particleMat = new THREE.PointsMaterial({ color: 0x3b82f6, size: 0.018, transparent: true, opacity: 0.5 });
+const particles = new THREE.Points(particleGeo, particleMat);
+scene.add(particles);
+
+// ─── Highlighted part tracking ───
+const originalMats = new Map();
+let highlightedMeshes = [];
+
+function collectMeshesByPart(group, partName, result = []) {
+    group.traverse(obj => {
+        if (obj.isMesh && obj.userData.part === partName) result.push(obj);
+    });
+    return result;
+}
+
+function clearHighlights() {
+    highlightedMeshes.forEach(m => {
+        if (originalMats.has(m.uuid)) {
+            m.material = originalMats.get(m.uuid);
+            originalMats.delete(m.uuid);
+        }
+    });
+    highlightedMeshes = [];
+}
+
+function highlightPart(partName) {
+    clearHighlights();
+    if (!partName) return;
+
+    const toHighlight = [
+        ...collectMeshesByPart(leftCtrl.group, partName),
+        ...collectMeshesByPart(rightCtrl.group, partName)
+    ];
+
+    toHighlight.forEach(m => {
+        originalMats.set(m.uuid, m.material);
+        const hlMat = m.material.clone();
+        hlMat.emissive = new THREE.Color(0x00ffaa);
+        hlMat.emissiveIntensity = 0.8;
+        hlMat.color = new THREE.Color(0x44ffcc);
+        m.material = hlMat;
+        highlightedMeshes.push(m);
+    });
+}
+
+// ─── Mouse / touch drag rotate ───
+let isDragging = false, prevMX = 0, prevMY = 0;
+let autoRotY = 0.005;
+let rotX = 0, rotY = 0;
+
+canvas.addEventListener('mousedown', e => { isDragging = true; prevMX = e.clientX; prevMY = e.clientY; autoRotY = 0; });
+window.addEventListener('mouseup', () => { isDragging = false; autoRotY = 0.003; });
+window.addEventListener('mousemove', e => {
+    if (!isDragging) return;
+    const dx = e.clientX - prevMX;
+    const dy = e.clientY - prevMY;
+    prevMX = e.clientX; prevMY = e.clientY;
+    rotY += dx * 0.012;
+    rotX += dy * 0.008;
+    rotX = Math.max(-0.8, Math.min(0.8, rotX));
+    controllerGroup.rotation.y = rotY;
+    controllerGroup.rotation.x = rotX;
+});
+
+canvas.addEventListener('touchstart', e => { if (e.touches.length===1) { isDragging = true; prevMX = e.touches[0].clientX; prevMY = e.touches[0].clientY; autoRotY = 0; }}, {passive:true});
+window.addEventListener('touchend', () => { isDragging = false; autoRotY = 0.003; });
+window.addEventListener('touchmove', e => {
+    if (!isDragging || e.touches.length!==1) return;
+    const dx = e.touches[0].clientX - prevMX;
+    const dy = e.touches[0].clientY - prevMY;
+    prevMX = e.touches[0].clientX; prevMY = e.touches[0].clientY;
+    rotY += dx * 0.012; rotX += dy * 0.008;
+    rotX = Math.max(-0.8, Math.min(0.8, rotX));
+    controllerGroup.rotation.y = rotY;
+    controllerGroup.rotation.x = rotX;
+}, {passive:true});
+
+// ─── Render loop ───
+let t = 0;
+function animate() {
+    animFrame = requestAnimationFrame(animate);
+    t += 0.016;
+
+    // Auto rotate when not dragging
+    if (!isDragging) {
+        rotY += autoRotY;
+        controllerGroup.rotation.y = rotY;
+    }
+
+    // Subtle floating bob
+    controllerGroup.position.y = Math.sin(t * 0.8) * 0.04;
+    leftCtrl.group.position.y  = Math.sin(t * 0.9 + 0.5) * 0.03;
+    rightCtrl.group.position.y = Math.sin(t * 0.9) * 0.03;
+
+    // Pulsing glow on highlighted
+    if (highlightedMeshes.length > 0) {
+        const pulse = 0.5 + 0.5 * Math.sin(t * 4);
+        highlightedMeshes.forEach(m => {
+            if (m.material.emissiveIntensity !== undefined) {
+                m.material.emissiveIntensity = 0.4 + pulse * 0.8;
+            }
+        });
+    }
+
+    // Rotate glow lights
+    glow1.position.x = Math.cos(t * 0.4) * 2.5;
+    glow1.position.z = Math.sin(t * 0.4) * 2.5;
+    glow2.position.x = Math.cos(t * 0.4 + Math.PI) * 2.5;
+    glow2.position.z = Math.sin(t * 0.4 + Math.PI) * 2.5;
+
+    // Particle drift
+    particles.rotation.y = t * 0.05;
+
+    renderer.render(scene, camera);
+}
+animate();
+
+// Resize
+window.addEventListener('resize', () => {
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+});
+
+// ═══════════════════════════════════════════════════════════════
+//  STEP DOTS
+// ═══════════════════════════════════════════════════════════════
+function buildDots() {
+    const dotsEl = document.getElementById('step-dots');
+    dotsEl.innerHTML = '';
+    STEPS.forEach((_, i) => {
+        const d = document.createElement('div');
+        d.className = 'step-dot' + (i === currentStep ? ' active' : '');
+        d.onclick = () => goToStep(i);
+        dotsEl.appendChild(d);
+    });
+}
+buildDots();
+
+// ═══════════════════════════════════════════════════════════════
+//  VOICEOVER (Server-side gTTS with Client fallback)
+// ═══════════════════════════════════════════════════════════════
+let audioPlayer = new Audio();
+
+async function speak(text) {
+    if (!voEnabled) return;
+    
+    // Stop any existing speech
+    if (audioPlayer) {
+        audioPlayer.pause();
+        audioPlayer.src = "";
+    }
+    if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+    }
+
+    try {
+        // Try Server-side high quality TTS first
+        const ttsUrl = `/api/tts?text=${encodeURIComponent(text)}`;
+        audioPlayer.src = ttsUrl;
+        
+        audioPlayer.onplay = () => {
+            document.getElementById('vo-dot').style.display = 'block';
+            speaking = true;
+        };
+        
+        audioPlayer.onended = () => {
+            document.getElementById('vo-dot').style.display = 'none';
+            speaking = false;
+        };
+
+        await audioPlayer.play();
+    } catch (err) {
+        console.warn("Server TTS failed, falling back to Web Speech API", err);
+        // Fallback to local browser speech
+        if ('speechSynthesis' in window) {
+            const utt = new SpeechSynthesisUtterance(text);
+            utt.rate = 0.95;
+            utt.pitch = 1.0;
+            
+            utt.onstart = () => {
+                document.getElementById('vo-dot').style.display = 'block';
+                speaking = true;
+            };
+            utt.onend = () => {
+                document.getElementById('vo-dot').style.display = 'none';
+                speaking = false;
+            };
+            window.speechSynthesis.speak(utt);
+        }
+    }
+}
+
+window.toggleVoiceover = function() {
+    voEnabled = !voEnabled;
+    const ic = document.getElementById('vo-icon');
+    const btn = document.getElementById('vo-toggle');
+    if (voEnabled) {
+        ic.className = 'fas fa-volume-up';
+        btn.classList.remove('muted');
+        speak(STEPS[currentStep].voiceover);
+    } else {
+        ic.className = 'fas fa-volume-mute';
+        btn.classList.add('muted');
+        if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+        document.getElementById('vo-dot').style.display = 'none';
+    }
+};
+
+// ═══════════════════════════════════════════════════════════════
+//  STEP NAVIGATION
+// ═══════════════════════════════════════════════════════════════
+function goToStep(i, dir = 1) {
+    // Fade out
+    ['step-title','step-subtitle','highlight-label','voiceover-bar'].forEach(id => {
+        document.getElementById(id).classList.add('fade-out');
+    });
+
+    setTimeout(() => {
+        currentStep = i;
+        const step = STEPS[i];
+
+        // Update UI
+        document.getElementById('step-title').textContent = step.title;
+        document.getElementById('step-subtitle').textContent = step.subtitle;
+        document.getElementById('step-counter').textContent = `Step ${i+1} of ${STEPS.length}`;
+
+        document.getElementById('highlight-icon').style.background = step.highlightBg;
+        document.getElementById('highlight-icon').innerHTML = `<i class="fas ${step.highlightIcon}" style="color:${step.highlightColor}"></i>`;
+        document.getElementById('highlight-name').textContent = step.highlightName;
+        document.getElementById('highlight-desc').textContent = step.highlightDesc;
+
+        document.getElementById('vo-text').textContent = voEnabled ? '🔊 Speaking...' : '🔇 Voice off — press Voice to enable';
+
+        // Progress bar
+        const pct = (i / (STEPS.length - 1)) * 100;
+        document.getElementById('progress-bar').style.width = pct + '%';
+
+        // Buttons
+        document.getElementById('btn-prev').disabled = i === 0;
+        document.getElementById('btn-next').innerHTML = i === STEPS.length - 1
+            ? '<i class="fas fa-check"></i> Finish'
+            : 'Next <i class="fas fa-arrow-right"></i>';
+
+        // Highlight 3D part
+        highlightPart(step.highlightPart);
+
+        // Dynamic Pivot: Rotate models to show the highlighted part better
+        if (step.highlightPart === 'trigger' || step.highlightPart === 'thumbstick_left' || step.highlightPart === 'xy_buttons') {
+            rotY = 0.4; // Tilt left side towards camera
+        } else if (step.highlightPart === 'grip' || step.highlightPart === 'thumbstick_right' || step.highlightPart === 'ab_buttons') {
+            rotY = -0.4; // Tilt right side towards camera
+        } else {
+            rotY = 0; // Center
+        }
+        controllerGroup.rotation.y = rotY;
+
+        // Dots
+        document.querySelectorAll('.step-dot').forEach((d, idx) => {
+            d.classList.toggle('active', idx === i);
+        });
+
+        // Voiceover
+        if (voEnabled) speak(step.voiceover);
+
+        // Fade in
+        ['step-title','step-subtitle','highlight-label','voiceover-bar'].forEach(id => {
+            const el = document.getElementById(id);
+            el.classList.remove('fade-out');
+            el.classList.add('fade-in');
+        });
+    }, 300);
+}
+
+window.nextStep = function() {
+    if (currentStep >= STEPS.length - 1) {
+        showFinish();
+        return;
+    }
+    goToStep(currentStep + 1);
+};
+window.prevStep = function() {
+    if (currentStep > 0) goToStep(currentStep - 1);
+};
+
+window.skipTutorial = function() {
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    showFinish();
+};
+
+function showFinish() {
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    clearHighlights();
+    const fin = document.getElementById('finish-screen');
+    fin.classList.add('visible');
+    // Speak final message
+    setTimeout(() => {
+        if (voEnabled) speak("You are all set! Put on your headset and start exploring GPR data in virtual reality.");
+    }, 400);
+}
+
+window.closeTutorial = function() {
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    // Navigate back / close
+    if (window.history.length > 1) {
+        window.history.back();
+    } else {
+        window.close();
+    }
+};
+
+// Init first step silently (UI load)
+(function initFirst() {
+    const step = STEPS[0];
+    document.getElementById('step-title').textContent = step.title;
+    document.getElementById('step-subtitle').textContent = step.subtitle;
+    document.getElementById('highlight-icon').style.background = step.highlightBg;
+    document.getElementById('highlight-icon').innerHTML = `<i class="fas ${step.highlightIcon}" style="color:${step.highlightColor}"></i>`;
+    document.getElementById('highlight-name').textContent = step.highlightName;
+    document.getElementById('highlight-desc').textContent = step.highlightDesc;
+    document.getElementById('progress-bar').style.width = '0%';
+
+    // Delay voiceover so voices load
+    if (window.speechSynthesis) {
+        window.speechSynthesis.onvoiceschanged = () => {};
+    }
+    setTimeout(() => {
+        if (voEnabled) speak(step.voiceover);
+    }, 1200);
+})();
+
+</script>
+</body>
+</html>

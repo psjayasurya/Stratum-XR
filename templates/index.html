@@ -1,0 +1,2125 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stratum XR</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            /* Light Mode Default */
+            --bg-body: #f8f9fa;
+            --bg-surface: #ffffff;
+            --bg-header: #ffffff;
+            --text-primary: #202124;
+            --text-secondary: #5f6368;
+            --border: #dadce0;
+            --border-light: #e8eaed;
+            --primary: #107c41;
+            --primary-dark: #0b572e;
+            --primary-light: #33a868;
+            --secondary: #2b579a;
+            --danger: #d93025;
+            --warning: #f1c232;
+            --shadow: rgba(0, 0, 0, 0.2);
+            --modal-bg: #ffffff;
+            --font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            --input-bg: #ffffff;
+        }
+
+        [data-theme="dark"] {
+            --bg-body: #202124;
+            --bg-surface: #2d2e30;
+            --bg-header: #2d2e30;
+            --text-primary: #e8eaed;
+            --text-secondary: #bdc1c6;
+            --border: #5f6368;
+            --border-light: #3c4043;
+            --primary: #81c995;
+            --primary-dark: #33a868;
+            --primary-light: #107c41;
+            --secondary: #8ab4f8;
+            --danger: #f28b82;
+            --warning: #fdd663;
+            --shadow: rgba(0, 0, 0, 0.5);
+            --modal-bg: #2d2e30;
+            --input-bg: #3c4043;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: var(--font-family);
+            background-color: var(--bg-body);
+            min-height: 100vh;
+            margin: 0;
+            padding: 0;
+            color: var(--text-primary);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            /* App-like feel */
+        }
+
+        /* Top Bar */
+        .app-header {
+            background-color: var(--bg-header);
+            border-bottom: 1px solid var(--border);
+            padding: 0 16px;
+            height: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-shrink: 0;
+            z-index: 100;
+        }
+
+        .app-logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-weight: 500;
+            font-size: 1.1em;
+            color: var(--text-primary);
+        }
+
+        .app-logo img {
+            height: 32px;
+            width: auto;
+        }
+
+        .user-profile {
+            font-size: 0.9em;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .user-profile form {
+            margin: 0;
+        }
+
+        .logout-btn {
+            background: none;
+            border: none;
+            color: var(--danger);
+            cursor: pointer;
+            font-weight: 500;
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+
+        .logout-btn:hover {
+            background-color: #fce8e6;
+        }
+
+        /* Tab Navigation (Ribbon-like) */
+        .tabs-header {
+            background-color: var(--bg-header);
+            border-bottom: 1px solid var(--border);
+            padding: 0 16px;
+            display: flex;
+            gap: 4px;
+            flex-shrink: 0;
+            overflow-x: auto;
+            align-items: flex-end;
+            height: 40px;
+        }
+
+        .tab-btn {
+            padding: 8px 16px;
+            border: 1px solid transparent;
+            border-bottom: none;
+            border-radius: 4px 4px 0 0;
+            background: transparent;
+            cursor: pointer;
+            font-size: 0.95em;
+            color: var(--text-secondary);
+            transition: all 0.2s;
+            position: relative;
+            top: 1px;
+            /* Overlap border */
+        }
+
+        .tab-btn:hover {
+            background-color: var(--border-light);
+            color: var(--text-primary);
+        }
+
+        .tab-btn.active {
+            background-color: var(--bg-body);
+            /* Matches body/content bg */
+            border-color: var(--border);
+            border-bottom-color: var(--bg-body);
+            color: var(--primary);
+            font-weight: 600;
+            z-index: 2;
+        }
+
+        .tab-btn i {
+            margin-right: 6px;
+            font-size: 0.9em;
+        }
+
+        /* Main Workspace & Hero */
+        .workspace {
+            flex: 1;
+            position: relative;
+            background-color: var(--bg-body);
+            overflow: hidden;
+            /* Prevent body scroll when modal is open */
+        }
+
+        .hero-placeholder {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-secondary);
+            z-index: 1;
+        }
+
+        /* Modal / Tab Content Popup */
+        .tab-content {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 90%;
+            max-width: 1000px;
+            max-height: 85vh;
+            background: var(--modal-bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 32px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            z-index: 1000;
+            overflow-y: auto;
+            animation: popIn 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        @keyframes popIn {
+            from {
+                opacity: 0;
+                transform: translate(-50%, -45%) scale(0.95);
+            }
+
+            to {
+                opacity: 1;
+                transform: translate(-50%, -50%) scale(1);
+            }
+        }
+
+        /* Backdrop */
+        .modal-backdrop {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(2px);
+            z-index: 999;
+        }
+
+        .modal-backdrop.active {
+            display: block;
+        }
+
+        /* Close Button */
+        .close-modal-btn {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 1.2em;
+            cursor: pointer;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+
+        .close-modal-btn:hover {
+            background-color: var(--border-light);
+            color: var(--danger);
+        }
+
+        /* Keep existing styles below... */
+        .section-title {
+            margin-top: 0;
+            margin-bottom: 24px;
+            font-size: 1.25em;
+            color: var(--text-primary);
+            border-bottom: 2px solid var(--gray-100);
+            padding-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding-right: 40px;
+            /* Space for close btn */
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 24px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: var(--gray-700);
+            font-size: 0.9em;
+        }
+
+        input[type="text"],
+        input[type="number"],
+        select {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-size: 0.95em;
+            color: var(--text-primary);
+            transition: border-color 0.2s;
+            background-color: var(--input-bg);
+        }
+
+        input:focus,
+        select:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px rgba(16, 124, 65, 0.1);
+        }
+
+        .help-text {
+            font-size: 0.85em;
+            color: var(--text-secondary);
+            margin-top: 6px;
+        }
+
+        /* File Upload Styling */
+        .file-drop-zone {
+            border: 2px dashed var(--border);
+            border-radius: 8px;
+            padding: 32px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            background-color: var(--bg-body);
+        }
+
+        .file-drop-zone:hover {
+            border-color: var(--primary);
+            background-color: rgba(16, 124, 65, 0.04);
+        }
+
+        .file-drop-zone.drag-over {
+            border-color: var(--primary);
+            background-color: rgba(16, 124, 65, 0.08);
+            transform: scale(1.01);
+        }
+
+        .file-drop-zone.file-selected {
+            border-color: var(--primary);
+            background-color: rgba(16, 124, 65, 0.04);
+            border-style: solid;
+        }
+
+        .drop-zone-icon {
+            font-size: 2em;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+        }
+
+        .file-selected .drop-zone-icon {
+            color: var(--primary);
+        }
+
+        .drop-zone-text {
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+
+        .selected-file-name {
+            margin-top: 12px;
+            display: inline-block;
+            padding: 4px 12px;
+            background: var(--bg-surface);
+            border: 1px solid var(--primary);
+            border-radius: 100px;
+            color: var(--primary);
+            font-size: 0.85em;
+            font-weight: 600;
+        }
+
+        .file-input-hidden {
+            display: none;
+        }
+
+        /* Batch List */
+        .batch-container {
+            margin-top: 32px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+            background: var(--bg-surface);
+        }
+
+        .batch-header {
+            background: var(--bg-body);
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+            font-weight: 600;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .batch-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .batch-item {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border-light);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transition: background 0.2s;
+        }
+
+        .batch-item:hover {
+            background-color: var(--bg-body);
+        }
+
+        .batch-item:last-child {
+            border-bottom: none;
+        }
+
+        .batch-info {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .batch-main-text {
+            font-weight: 500;
+        }
+
+        .batch-sub-text {
+            font-size: 0.85em;
+            color: var(--text-secondary);
+            display: flex;
+            gap: 12px;
+        }
+
+        .btn-icon {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 4px;
+            transition: color 0.2s;
+        }
+
+        .btn-icon:hover {
+            color: var(--danger);
+            background-color: rgba(217, 48, 37, 0.08);
+        }
+
+        /* Action Bar */
+        .action-bar {
+            margin-top: 32px;
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+            padding-top: 20px;
+            border-top: 1px solid var(--gray-100);
+        }
+
+        .btn {
+            padding: 10px 24px;
+            border-radius: 4px;
+            font-weight: 600;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 0.95em;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* Search Container */
+        .search-container {
+            margin-bottom: 24px;
+            position: relative;
+        }
+
+        .search-container i {
+            position: absolute;
+            left: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-secondary);
+            font-size: 0.9em;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 12px 14px 12px 42px !important;
+            border: 1px solid var(--border);
+            border-radius: 8px !important;
+            background-color: var(--input-bg);
+            transition: all 0.2s;
+        }
+
+        .search-input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px rgba(16, 124, 65, 0.1);
+        }
+
+        .btn-primary {
+            background-color: var(--primary);
+            color: white;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+        }
+
+        .btn-primary:hover {
+            background-color: var(--primary-dark);
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+        }
+
+        .btn-secondary {
+            background-color: var(--bg-surface);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+        }
+
+        .btn-secondary:hover {
+            background-color: var(--bg-body);
+            border-color: var(--text-secondary);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            background-color: var(--gray-200);
+            color: var(--gray-500);
+            box-shadow: none;
+        }
+
+        /* Checkboxes */
+        .checkbox-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 0;
+            cursor: pointer;
+        }
+
+        .checkbox-wrapper input {
+            width: 18px;
+            height: 18px;
+            accent-color: var(--primary);
+        }
+
+        /* Palette Grid */
+        .palette-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 16px;
+            margin-top: 16px;
+        }
+
+        .palette-option {
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .palette-option:hover {
+            border-color: var(--primary);
+            background-color: var(--bg-body);
+        }
+
+        .palette-option.selected {
+            border-color: var(--primary);
+            background-color: rgba(16, 124, 65, 0.08);
+            box-shadow: inset 0 0 0 1px var(--primary);
+        }
+
+        .palette-preview-bar {
+            height: 24px;
+            border-radius: 2px;
+            margin-top: 8px;
+            display: flex;
+            overflow: hidden;
+        }
+
+        .palette-color-slice {
+            flex: 1;
+            height: 100%;
+        }
+
+        /* Project Grid */
+        .project-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 20px;
+        }
+
+        .project-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+            position: relative;
+            transition: all 0.2s;
+        }
+
+        .project-card:hover {
+            border-color: var(--primary);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            transform: translateY(-2px);
+        }
+
+        .project-card.selected {
+            border-color: var(--primary);
+            background-color: rgba(16, 124, 65, 0.04);
+        }
+
+        .project-title {
+            font-weight: 600;
+            margin: 0 0 8px 0;
+            padding-right: 24px;
+        }
+
+        .project-meta {
+            font-size: 0.85em;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 12px;
+        }
+
+        .project-select {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            width: 18px;
+            height: 18px;
+            accent-color: var(--primary);
+        }
+
+        /* Status Area */
+        .status-area {
+            background: var(--bg-body);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 20px;
+            margin-top: 24px;
+            display: none;
+        }
+
+        .progress-bar-container {
+            height: 8px;
+            background: var(--border);
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 12px 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            width: 0%;
+            background: var(--primary);
+            transition: width 0.3s ease;
+        }
+
+        .log-area {
+            font-family: monospace;
+            font-size: 0.85em;
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            padding: 10px;
+            border-radius: 4px;
+            height: 120px;
+            overflow-y: auto;
+            margin-top: 12px;
+        }
+
+        /* Multi Grid Footer */
+        .multi-grid-footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            left: 0;
+            right: 0;
+            background: var(--bg-surface);
+            border-top: 1px solid var(--primary);
+            padding: 12px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.05);
+            transform: translateY(100%);
+            transition: transform 0.3s ease;
+            z-index: 200;
+        }
+
+        .multi-grid-footer.show {
+            transform: translateY(0);
+        }
+
+        /* Responsive Hero Styles */
+        .hero-responsive {
+            background: transparent;
+            flex-direction: row;
+            padding-left: 5vw;
+            padding-right: 0;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .hero-left {
+            flex: 0 0 45%;
+            max-width: 600px;
+            z-index: 2;
+            text-align: left;
+            padding-left: 20px;
+        }
+
+
+
+        .hero-title-text {
+            font-size: 3.5em;
+            margin: 0 0 10px 0;
+            color: var(--text-primary);
+            letter-spacing: -1px;
+            line-height: 1.1;
+        }
+
+        .hero-desc {
+            color: var(--text-secondary);
+            font-size: 1.1em;
+            line-height: 1.6;
+            max-width: 440px;
+        }
+
+        @media (max-width: 900px) {
+            .hero-responsive {
+                flex-direction: column;
+                justify-content: flex-start;
+                padding: 80px 20px 20px 20px !important;
+                /* Override standard padding */
+                overflow-y: auto;
+            }
+
+            .hero-left {
+                flex: 0 0 auto;
+                width: 100%;
+                max-width: 100%;
+                text-align: center;
+                padding-left: 0;
+                margin-bottom: 40px;
+            }
+
+
+
+            .hero-title-text {
+                font-size: 2.5em;
+            }
+
+            .hero-desc {
+                margin: 0 auto;
+                /* Center text */
+            }
+        }
+
+        /* ===== PROFILE POPUP ===== */
+        .profile-backdrop {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(4px);
+            z-index: 5000;
+            animation: fadeIn 0.2s ease;
+        }
+
+        .profile-backdrop.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+
+            to {
+                opacity: 1;
+            }
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translate(-50%, -48%);
+            }
+
+            to {
+                opacity: 1;
+                transform: translate(-50%, -50%);
+            }
+        }
+
+        .profile-popup {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 420px;
+            max-width: 92vw;
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            z-index: 5001;
+            overflow: hidden;
+            animation: slideDown 0.3s ease;
+        }
+
+        .profile-popup.active {
+            display: block;
+        }
+
+        .profile-popup-header {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            padding: 24px 24px 50px 24px;
+            position: relative;
+            text-align: center;
+        }
+
+        .profile-popup-header h3 {
+            color: white;
+            margin: 0;
+            font-size: 1.1em;
+            font-weight: 600;
+        }
+
+        .profile-close-btn {
+            position: absolute;
+            top: 12px;
+            right: 14px;
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: white;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            font-size: 1em;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s;
+        }
+
+        .profile-close-btn:hover {
+            background: rgba(255, 255, 255, 0.35);
+        }
+
+        .profile-avatar-wrapper {
+            position: absolute;
+            bottom: -32px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        .profile-avatar {
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            border: 4px solid var(--bg-surface);
+            background: var(--gray-200);
+            object-fit: cover;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .profile-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 50%;
+        }
+
+        .profile-avatar .avatar-placeholder {
+            font-size: 2.2em;
+            color: var(--text-secondary);
+        }
+
+        .profile-popup-body {
+            padding: 52px 24px 20px 24px;
+        }
+
+        .profile-email-display {
+            text-align: center;
+            font-size: 0.85em;
+            color: var(--text-secondary);
+            margin-bottom: 20px;
+            word-break: break-all;
+        }
+
+        .profile-form-group {
+            margin-bottom: 16px;
+        }
+
+        .profile-form-group label {
+            display: block;
+            font-size: 0.8em;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 5px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .profile-form-group input[type="text"],
+        .profile-form-group input[type="file"] {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 0.95em;
+            background: var(--input-bg);
+            color: var(--text-primary);
+            transition: border-color 0.2s;
+        }
+
+        .profile-form-group input[type="text"]:focus {
+            border-color: var(--primary);
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(16, 124, 65, 0.1);
+        }
+
+        .profile-form-group input[type="file"] {
+            padding: 8px;
+            font-size: 0.85em;
+            cursor: pointer;
+        }
+
+        .profile-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .profile-actions .btn {
+            flex: 1;
+            justify-content: center;
+            border-radius: 8px;
+        }
+
+        .profile-save-status {
+            text-align: center;
+            font-size: 0.85em;
+            margin-top: 10px;
+            min-height: 20px;
+            color: var(--primary);
+        }
+
+        /* Profile icon button in header */
+        .profile-icon-btn {
+            background: none;
+            border: 2px solid var(--border);
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            transition: all 0.2s;
+            padding: 0;
+        }
+
+        .profile-icon-btn:hover {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(16, 124, 65, 0.15);
+        }
+
+        .profile-icon-btn img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .profile-icon-btn i {
+            font-size: 1.1em;
+            color: var(--text-secondary);
+        }
+
+        /* Scanning HUD Effect */
+        .scanning-hud {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background:
+                radial-gradient(circle at center, transparent 30%, rgba(16, 124, 65, 0.05) 100%),
+                linear-gradient(rgba(16, 124, 65, 0.1) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(16, 124, 65, 0.1) 1px, transparent 1px);
+            background-size: 100% 100%, 50px 50px, 50px 50px;
+            pointer-events: none;
+            opacity: 0.4;
+        }
+
+        .scanning-hud::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(to bottom,
+                    transparent 0%,
+                    rgba(129, 201, 149, 0.2) 50%,
+                    transparent 100%);
+            animation: radar-sweep 6s linear infinite;
+        }
+
+        @keyframes radar-sweep {
+            from {
+                transform: translateY(-100%);
+            }
+
+            to {
+                transform: translateY(100%);
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <!-- App Header -->
+    <header class="app-header">
+        <div class="app-logo">
+            <img src="/static/logo.jpeg" alt="Logo">
+            Stratum XR
+        </div>
+        <div class="user-profile">
+            <button id="theme-toggle" class="logout-btn" style="margin-right:10px; color:var(--text-secondary);"
+                title="Toggle Theme">
+                <i class="fas fa-moon"></i>
+            </button>
+            <span style="margin-right:6px;"><span id="userEmail" style="display:none;">{{ user }}</span></span>
+            <button class="profile-icon-btn" id="profileIconBtn" onclick="openProfilePopup()" title="My Profile">
+                <i class="fas fa-user" id="profileIconPlaceholder"></i>
+                <img id="profileIconImg" src="" alt="" style="display:none;">
+            </button>
+            <form method="POST" action="/logout">
+                <button class="logout-btn">Log Out</button>
+            </form>
+        </div>
+    </header>
+
+    <!-- Tab Strip (Ribbon) -->
+    <div class="tabs-header">
+        <button class="tab-btn active" onclick="switchTab('file')"><i class="fas fa-file-upload"></i> Files &
+            Upload</button>
+        <button class="tab-btn" onclick="switchTab('data')"><i class="fas fa-database"></i> Data Config</button>
+        <button class="tab-btn" onclick="switchTab('process')"><i class="fas fa-cogs"></i> Processing</button>
+        <button class="tab-btn" onclick="switchTab('visual')"><i class="fas fa-palette"></i> Visualization</button>
+        <button class="tab-btn" onclick="switchTab('projects')"><i class="fas fa-folder-open"></i> My Projects <span
+                id="projectCountBadge"
+                style="background:var(--danger); color:white; font-size:0.75em; padding:2px 6px; border-radius:10px; display:none;">0</span></button>
+    </div>
+
+    <!-- Main Workspace -->
+    <div class="workspace">
+        <div class="modal-backdrop" id="modalBackdrop" onclick="closeAllModals()"></div>
+
+        <!-- Profile Popup -->
+        <div class="profile-backdrop" id="profileBackdrop" onclick="closeProfilePopup()"></div>
+        <div class="profile-popup" id="profilePopup">
+            <div class="profile-popup-header">
+                <h3><i class="fas fa-user-cog"></i> My Profile</h3>
+                <button class="profile-close-btn" onclick="closeProfilePopup()">
+                    <i class="fas fa-times"></i>
+                </button>
+                <div class="profile-avatar-wrapper">
+                    <div class="profile-avatar" id="profileAvatarLarge">
+                        <span class="avatar-placeholder"><i class="fas fa-user"></i></span>
+                    </div>
+                </div>
+            </div>
+            <div class="profile-popup-body">
+                <div class="profile-email-display" id="profileEmailDisplay"></div>
+                <div class="profile-form-group">
+                    <label>Display Name</label>
+                    <input type="text" id="profileName" placeholder="Enter your name">
+                </div>
+                <div class="profile-form-group">
+                    <label>Company Name</label>
+                    <input type="text" id="profileCompany" placeholder="Enter company name">
+                </div>
+                <div class="profile-form-group">
+                    <label>Profile Photo</label>
+                    <input type="file" id="profilePhoto" accept="image/*">
+                </div>
+                <div class="profile-actions">
+                    <button class="btn btn-secondary" onclick="closeProfilePopup()"><i class="fas fa-times"></i>
+                        Close</button>
+                    <button class="btn btn-primary" onclick="saveProfile()"><i class="fas fa-save"></i> Save
+                        Profile</button>
+                </div>
+                <div class="profile-save-status" id="profileSaveStatus"></div>
+            </div>
+        </div>
+
+        <div class="hero-placeholder hero-responsive">
+            <div id="earth-container"
+                style="position:absolute; top:0; left:0; width:100%; height:100%; z-index:-1; pointer-events:none; opacity:0.8;">
+                <div class="scanning-hud"></div>
+            </div>
+
+            <!-- Left Side: Text Intro -->
+            <div class="hero-left">
+                <h1 class="hero-title-text">Stratum XR</h1>
+
+                <div
+                    style="font-size:1.5em; color:var(--text-secondary); font-family:monospace; font-weight:600; min-height:60px; margin-bottom:10px;">
+                    <span class="text-type-container"
+                        data-text="['Analyze GPR Data.', 'Visualize in VR.', 'Field Surveys.']" data-speed="60"
+                        data-delete-speed="30" data-pause="2000" data-loop="true">
+                    </span>
+                </div>
+
+                <p class="hero-desc">
+                    The advanced platform for subsurface visualization. Upload your GPR surveys and explore them in
+                    immersive 3D/VR.
+                </p>
+
+                <div style="margin-top:30px;">
+                    <button class="btn btn-primary" onclick="switchTab('file')"
+                        style="padding:12px 30px; font-size:1em; border-radius:30px;">
+                        Get Started <i class="fas fa-arrow-right" style="margin-left:8px;"></i>
+                    </button>
+                </div>
+            </div>
+
+
+        </div>
+
+        <!-- FILE / UPLOAD TAB -->
+        <div id="tab-file" class="tab-content">
+            <button class="close-modal-btn" onclick="closeAllModals()"><i class="fas fa-times"></i></button>
+            <h2 class="section-title"><i class="fas fa-cloud-upload-alt"></i> Import Data & Mange Batch</h2>
+
+            <div class="form-group" style="max-width: 500px;">
+                <label for="jobName">Project Name (Base ID) <span style="color:var(--danger)">*</span></label>
+                <input type="text" id="jobName" placeholder="e.g., Site_Survey_2024" required>
+                <div class="help-text">Outputs will be named: ProjectName-YourEmail_Index</div>
+            </div>
+
+            <div class="form-grid">
+                <!-- CSV Input -->
+                <div class="form-group">
+                    <label>GPR Data (.csv, .hdf) <span style="color:var(--danger)">*</span></label>
+                    <div class="file-drop-zone" data-input="csv-input">
+                        <div class="drop-zone-icon"><i class="fas fa-file-csv"></i></div>
+                        <div class="drop-zone-text">Click or Drop CSV/HDF</div>
+                        <input type="file" id="csvInput" class="csv-input file-input-hidden" accept=".csv,.txt,.hdf"
+                            multiple>
+                    </div>
+                </div>
+
+                <!-- KML Input -->
+                <div class="form-group">
+                    <label>Geolocation (.kml, .zip)</label>
+                    <div class="file-drop-zone" data-input="kml-input">
+                        <div class="drop-zone-icon"><i class="fas fa-map-marked-alt"></i></div>
+                        <div class="drop-zone-text">Click or Drop KML/Shapefile</div>
+                        <input type="file" id="kmlInput" class="kml-input file-input-hidden" accept=".kml,.zip"
+                            multiple>
+                    </div>
+                </div>
+
+                <!-- Pipe Input -->
+                <div class="form-group">
+                    <label>3D Pipe Model (.ply)</label>
+                    <div class="file-drop-zone" data-input="pipe-input">
+                        <div class="drop-zone-icon"><i class="fas fa-cube"></i></div>
+                        <div class="drop-zone-text">Click or Drop PLY Model</div>
+                        <input type="file" id="pipeInput" class="pipe-input file-input-hidden" accept=".ply" multiple>
+                    </div>
+                </div>
+            </div>
+
+            <div class="action-bar" style="justify-content: flex-start;">
+                <button class="btn btn-secondary" onclick="addToBatch()">
+                    <i class="fas fa-plus"></i> Add to Batch
+                </button>
+            </div>
+
+            <!-- Batch List -->
+            <div class="batch-container">
+                <div class="batch-header">
+                    <span>Batch Queue (<span id="batchCount">0</span>)</span>
+                    <button class="btn-icon" style="font-size:0.9em;" onclick="clearBatch()" title="Clear All"><i
+                            class="fas fa-trash"></i></button>
+                </div>
+                <div class="batch-list" id="batchListHTML">
+                    <div style="padding:20px; text-align:center; color:var(--text-secondary); font-style:italic;">
+                        No files added. Upload files above and click "Add to Batch".
+                    </div>
+                </div>
+            </div>
+
+            <div class="action-bar">
+                <button class="btn btn-primary" id="processBtn" onclick="processBatch()" disabled>
+                    <i class="fas fa-rocket"></i> Start Processing Batch
+                </button>
+            </div>
+
+            <!-- Status Area -->
+            <div class="status-area" id="statusArea">
+                <h3 style="margin-top:0;">Processing Status</h3>
+                <div id="statusMessage">Initializing...</div>
+                <div class="progress-bar-container">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+                <div
+                    style="display:flex; justify-content:space-between; font-size:0.85em; color:var(--text-secondary);">
+                    <span id="progressText">0%</span>
+                </div>
+                <div class="log-area" id="batchStatusList"></div>
+            </div>
+
+        </div>
+
+        <!-- DATA CONFIG TAB -->
+        <div id="tab-data" class="tab-content">
+            <button class="close-modal-btn" onclick="closeAllModals()"><i class="fas fa-times"></i></button>
+            <h2 class="section-title"><i class="fas fa-table"></i> Data Column Mapping</h2>
+            <p>Specify the zero-based index of your data columns in the CSV files.</p>
+
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>X Column Index</label>
+                    <input type="number" id="colIdxX" value="{{ default_settings.col_idx_x }}" min="0">
+                </div>
+                <div class="form-group">
+                    <label>Y Column Index</label>
+                    <input type="number" id="colIdxY" value="{{ default_settings.col_idx_y }}" min="0">
+                </div>
+                <div class="form-group">
+                    <label>Z (Depth) Column Index</label>
+                    <input type="number" id="colIdxZ" value="{{ default_settings.col_idx_z }}" min="0">
+                </div>
+                <div class="form-group">
+                    <label>Amplitude Column Index</label>
+                    <input type="number" id="colIdxAmplitude" value="{{ default_settings.col_idx_amplitude }}" min="0">
+                </div>
+            </div>
+
+            <h3 style="margin-top:32px; border-bottom:1px solid var(--gray-200); padding-bottom:10px;">Coordinate
+                Systems</h3>
+            <div class="checkbox-wrapper">
+                <input type="checkbox" id="invertDepth" checked>
+                <label for="invertDepth">Invert Depth (Positive values go Down)</label>
+            </div>
+            <div class="checkbox-wrapper">
+                <input type="checkbox" id="centerCoordinates" checked>
+                <label for="centerCoordinates">Center Coordinates (Localizes 0,0,0)</label>
+            </div>
+        </div>
+
+        <!-- PROCESSING TAB -->
+        <div id="tab-process" class="tab-content">
+            <button class="close-modal-btn" onclick="closeAllModals()"><i class="fas fa-times"></i></button>
+            <h2 class="section-title"><i class="fas fa-microchip"></i> Processing Parameters</h2>
+
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>Amplitude Percentile (0.01 - 1.0)</label>
+                    <input type="number" id="thresholdPercentile" value="{{ default_settings.threshold_percentile }}"
+                        step="0.01" min="0.01" max="1.0">
+                    <div class="help-text">Top % of strongest signals to keep. Higher = Fewer points.</div>
+                </div>
+
+                <div class="form-group">
+                    <label>Number of Layers (Iso-Surfaces)</label>
+                    <input type="number" id="isoBins" value="{{ default_settings.iso_bins }}" min="1" max="20">
+                    <div class="help-text">How many intensity layers to generate.</div>
+                </div>
+
+                <div class="form-group">
+                    <label>Max Points per Layer</label>
+                    <input type="number" id="maxPointsPerLayer" value="{{ default_settings.max_points_per_layer }}"
+                        step="1000">
+                    <div class="help-text">Limit per layer to maintain VR performance.</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- VISUALIZATION TAB -->
+        <div id="tab-visual" class="tab-content">
+            <button class="close-modal-btn" onclick="closeAllModals()"><i class="fas fa-times"></i></button>
+            <h2 class="section-title"><i class="fas fa-eye"></i> Visual & VR Settings</h2>
+
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>VR Point Size</label>
+                    <input type="number" id="vrPointSize" value="{{ default_settings.vr_point_size }}" step="0.001">
+                </div>
+                <div class="form-group">
+                    <label>Depth Offset (Layer Spacing)</label>
+                    <input type="number" id="depthOffsetPerLevel" value="{{ default_settings.depth_offset_per_level }}"
+                        step="0.01">
+                </div>
+                <div class="form-group">
+                    <label>Font Size Multiplier</label>
+                    <input type="number" id="fontSizeMultiplier" value="{{ default_settings.font_size_multiplier }}"
+                        step="0.1">
+                </div>
+                <div class="form-group">
+                    <label>Font Family</label>
+                    <select id="fontFamily">
+                        <option value="Arial" {% if default_settings.font_family=='Arial' %}selected{% endif %}>Arial
+                        </option>
+                        <option value="Courier New" {% if default_settings.font_family=='Courier New' %}selected{% endif
+                            %}>Courier New</option>
+                        <option value="Verdana" {% if default_settings.font_family=='Verdana' %}selected{% endif %}>
+                            Verdana</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-group" style="margin-top:24px;">
+                <label>Color Palette</label>
+                <!-- Hidden Select for form logic compliance -->
+                <select id="colorPaletteSelect" style="display:none;"></select>
+
+                <div class="palette-grid" id="paletteGrid">
+                    <!-- Palettes populated by JS -->
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-projects" class="tab-content">
+            <h2 class="section-title"><i class="fas fa-folder"></i> My Processed Projects</h2>
+
+            <div
+                style="margin-bottom:12px; font-size:1.1em; color:var(--primary); font-family:monospace; font-weight:600;">
+                <span class="text-type-container"
+                    data-text="['Review past surveys.', 'Manage 3D models.', 'Visualize GPR data in VR.']"
+                    data-speed="60" data-delete-speed="30" data-pause="2000" data-loop="true">
+                </span>
+            </div>
+
+            <div style="display:flex; justify-content:space-between; margin-bottom:16px;">
+                <div style="font-size:0.9em; color:var(--text-secondary);">Select projects to view them together in VR.
+                </div>
+                <button class="btn btn-secondary" onclick="loadProjects(true)"><i class="fas fa-sync"></i> Refresh
+                    List</button>
+            </div>
+
+            <!-- Search Bar -->
+            <div class="search-container">
+                <i class="fas fa-search"></i>
+                <input type="text" id="projectSearch" class="search-input" placeholder="Search projects by name..."
+                    onkeyup="filterProjects()">
+            </div>
+
+            <div id="saved-views-section"
+                style="margin-bottom: 32px; display: none; border-bottom: 1px solid var(--gray-200); padding-bottom: 20px;">
+                <h3 style="font-size: 1.1em; color: var(--text-primary); margin-bottom: 16px;"><i
+                        class="fas fa-bookmark"></i> Saved View Groups</h3>
+                <div id="saved-views-grid" class="project-grid">
+                    <!-- Saved views go here -->
+                </div>
+            </div>
+
+            <div id="project-list-loading" style="text-align:center; padding:40px; display:none;">
+                <i class="fas fa-spinner fa-spin fa-2x"></i>
+            </div>
+
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                <h3 style="font-size: 1.1em; color: var(--text-primary); margin:0;">All Projects</h3>
+                <div class="checkbox-wrapper" style="padding:0;">
+                    <input type="checkbox" id="selectAllProjects" onclick="toggleSelectAll(this)">
+                    <label for="selectAllProjects"
+                        style="margin:0; font-size:0.9em; text-transform:none; letter-spacing:normal;">Select
+                        All</label>
+                </div>
+            </div>
+            <div id="project-list" class="project-grid">
+                <!-- Projects go here -->
+            </div>
+
+            <div id="no-projects-view"
+                style="text-align:center; padding:50px; display:none; color:var(--text-secondary);">
+                <i class="fas fa-cube fa-3x" style="color:var(--gray-300);"></i>
+                <p>No processed projects found. Go to 'Files' to upload data.</p>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Multi Grid Footer Panel -->
+    <div class="multi-grid-footer" id="multiGridFooter">
+        <div>
+            <strong style="color:var(--primary); font-size:1.1em;">Multi-Grid Selection</strong>
+            <div style="font-size:0.85em; color:var(--text-secondary);"><span id="selectionCount">0</span> projects
+                selected</div>
+        </div>
+        <div style="display:flex; gap:12px;">
+            <button class="btn btn-secondary" onclick="saveViewSelection()"><i class="fas fa-save"></i> Save
+                Group</button>
+            <button class="btn btn-secondary" style="color:var(--danger); border-color:var(--danger);"
+                onclick="deleteSelectedProjects()"><i class="fas fa-trash-alt"></i> Delete Selected</button>
+            <button class="btn btn-secondary" onclick="clearSelection()">Clear</button>
+            <button class="btn btn-primary" onclick="viewSelectedProjects()">Launch Multi-Grid VR <i
+                    class="fas fa-external-link-alt"></i></button>
+        </div>
+    </div>
+
+    <!-- Data Injection -->
+    <script id="palette-data" type="application/json">
+        {{ color_palettes | tojson }}
+    </script>
+
+    <script>
+        // --- MODAL / TAB SWITCHING ---
+        function switchTab(tabId) {
+            closeAllModals();
+
+            // Highlight button
+            const btn = document.querySelector(`button[onclick="switchTab('${tabId}')"]`);
+            if (btn) btn.classList.add('active');
+
+            // Show Modal & Backdrop
+            const tabEl = document.getElementById('tab-' + tabId);
+            if (tabEl) tabEl.classList.add('active');
+
+            const backdrop = document.getElementById('modalBackdrop');
+            if (backdrop) backdrop.classList.add('active');
+
+            if (tabId === 'projects') {
+                loadProjects();
+            }
+        }
+
+        function closeAllModals() {
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            document.getElementById('modalBackdrop').classList.remove('active');
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+        }
+
+        // --- DRAG AND DROP ---
+        function initializeDragAndDrop() {
+            const dropZones = document.querySelectorAll('.file-drop-zone');
+            dropZones.forEach(zone => {
+                const inputClass = zone.getAttribute('data-input');
+                const fileInput = zone.closest('.form-group').querySelector(`.${inputClass}`);
+
+                zone.addEventListener('click', () => fileInput.click());
+
+                ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                    zone.addEventListener(eventName, preventDefaults, false);
+                });
+
+                ['dragenter', 'dragover'].forEach(eventName => {
+                    zone.addEventListener(eventName, () => zone.classList.add('drag-over'), false);
+                });
+
+                ['dragleave', 'drop'].forEach(eventName => {
+                    zone.addEventListener(eventName, () => zone.classList.remove('drag-over'), false);
+                });
+
+                zone.addEventListener('drop', (e) => {
+                    const files = e.dataTransfer.files;
+                    if (files.length > 0) handleFileSelect(fileInput, zone, files);
+                }, false);
+
+                fileInput.addEventListener('change', (e) => {
+                    if (e.target.files.length > 0) handleFileSelect(fileInput, zone, e.target.files);
+                });
+            });
+        }
+
+        function preventDefaults(e) { e.preventDefault(); e.stopPropagation(); }
+
+        function handleFileSelect(input, zone, files) {
+            const dt = new DataTransfer();
+            for (let i = 0; i < files.length; i++) dt.items.add(files[i]);
+            input.files = dt.files;
+
+            zone.classList.add('file-selected');
+
+            // Clear old label
+            const oldLabel = zone.querySelector('.selected-file-name');
+            if (oldLabel) oldLabel.remove();
+
+            const lbl = document.createElement('div');
+            lbl.className = 'selected-file-name';
+            lbl.textContent = files.length === 1 ? files[0].name : `${files.length} files`;
+            zone.appendChild(lbl);
+        }
+
+        document.addEventListener('DOMContentLoaded', initializeDragAndDrop);
+
+        // --- BATCH MANAGEMENT ---
+        let fileBatch = [];
+
+        function addToBatch() {
+            const csvIn = document.getElementById('csvInput');
+            const kmlIn = document.getElementById('kmlInput');
+            const pipeIn = document.getElementById('pipeInput');
+
+            if (!csvIn.files.length) {
+                alert("Please select at least one GPR Data file (CSV/HDF).");
+                return;
+            }
+
+            const csvFiles = Array.from(csvIn.files);
+            const kmlFiles = Array.from(kmlIn.files || []);
+            const pipeFiles = Array.from(pipeIn.files || []);
+
+            csvFiles.forEach((csv, idx) => {
+                // Simple auto-match logic
+                const kml = kmlFiles.find(f => f.name.includes(csv.name.split('.')[0])) || kmlFiles[idx];
+                const pipe = pipeFiles.find(f => f.name.includes(csv.name.split('.')[0])) || pipeFiles[idx];
+
+                fileBatch.push({
+                    id: Date.now() + Math.random(),
+                    csv: csv,
+                    kml: kml,
+                    pipe: pipe
+                });
+            });
+
+            renderBatchList();
+
+            // Reset inputs
+            csvIn.value = ''; kmlIn.value = ''; pipeIn.value = '';
+            document.querySelectorAll('.file-drop-zone').forEach(z => {
+                z.classList.remove('file-selected');
+                const l = z.querySelector('.selected-file-name');
+                if (l) l.remove();
+            });
+        }
+
+        function removeFromBatch(id) {
+            fileBatch = fileBatch.filter(f => f.id !== id);
+            renderBatchList();
+        }
+
+        function clearBatch() {
+            if (confirm("Clear all files from batch?")) {
+                fileBatch = [];
+                renderBatchList();
+            }
+        }
+
+        function renderBatchList() {
+            const listEl = document.getElementById('batchListHTML');
+            const countEl = document.getElementById('batchCount');
+            const btn = document.getElementById('processBtn');
+
+            countEl.textContent = fileBatch.length;
+            btn.disabled = fileBatch.length === 0;
+
+            if (fileBatch.length === 0) {
+                listEl.innerHTML = '<div style="padding:20px; text-align:center; color:var(--text-secondary); font-style:italic;">No files added. Upload files above and click "Add to Batch".</div>';
+                return;
+            }
+
+            listEl.innerHTML = fileBatch.map((item, idx) => `
+                <div class="batch-item">
+                    <div class="batch-info">
+                        <div class="batch-main-text">#${idx + 1} ${item.csv.name}</div>
+                        <div class="batch-sub-text">
+                            ${item.kml ? `<span><i class="fas fa-map-marker-alt"></i> ${item.kml.name}</span>` : ''}
+                            ${item.pipe ? `<span><i class="fas fa-cube"></i> ${item.pipe.name}</span>` : ''}
+                        </div>
+                    </div>
+                    <button class="btn-icon" onclick="removeFromBatch(${item.id})"><i class="fas fa-times"></i></button>
+                </div>
+            `).join('');
+        }
+
+        // --- PROCESSING ---
+        let currentJobIds = [];
+
+        async function processBatch() {
+            const jobName = document.getElementById('jobName').value.trim();
+            if (!jobName) { alert("Please enter a Project Name"); return; }
+
+            document.getElementById('processBtn').disabled = true;
+            document.getElementById('statusArea').style.display = 'block';
+
+            const userEmail = document.getElementById('userEmail').textContent.trim();
+            const prefix = `${jobName}-${userEmail}`;
+            const logEl = document.getElementById('batchStatusList');
+            logEl.innerHTML = '';
+
+            const log = (msg, col) => {
+                const d = document.createElement('div');
+                d.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+                if (col) d.style.color = col;
+                logEl.appendChild(d);
+                logEl.scrollTop = logEl.scrollHeight;
+            }
+
+            currentJobIds = [];
+
+            for (let i = 0; i < fileBatch.length; i++) {
+                const item = fileBatch[i];
+                const subName = `${prefix}_${i + 1}`;
+                log(`Starting ${item.csv.name}...`);
+
+                try {
+                    const formData = new FormData();
+                    formData.append('file', item.csv);
+                    formData.append('job_name', subName);
+                    formData.append('file_format', item.csv.name.toLowerCase().endsWith('.hdf') ? 'hdf' : 'csv');
+                    if (item.kml) formData.append('kml_file', item.kml);
+                    if (item.pipe) formData.append('pipe_file', item.pipe);
+
+                    // Settings
+                    formData.append('col_idx_x', document.getElementById('colIdxX').value);
+                    formData.append('col_idx_y', document.getElementById('colIdxY').value);
+                    formData.append('col_idx_z', document.getElementById('colIdxZ').value);
+                    formData.append('col_idx_amplitude', document.getElementById('colIdxAmplitude').value);
+                    formData.append('threshold_percentile', document.getElementById('thresholdPercentile').value);
+                    formData.append('iso_bins', document.getElementById('isoBins').value);
+                    formData.append('max_points_per_layer', document.getElementById('maxPointsPerLayer').value);
+                    formData.append('vr_point_size', document.getElementById('vrPointSize').value);
+                    formData.append('depth_offset_per_level', document.getElementById('depthOffsetPerLevel').value);
+                    formData.append('invert_depth', document.getElementById('invertDepth').checked);
+                    formData.append('center_coordinates', document.getElementById('centerCoordinates').checked);
+                    formData.append('color_palette', selectedPalette);
+                    formData.append('font_size_multiplier', document.getElementById('fontSizeMultiplier').value);
+                    formData.append('font_family', document.getElementById('fontFamily').value);
+
+                    const res = await fetch('/upload', { method: 'POST', body: formData });
+                    const data = await res.json();
+
+                    if (data.error) throw new Error(data.error);
+
+                    log(`Uploaded. Job ID: ${data.job_id}`);
+                    currentJobIds.push(data.job_id);
+
+                    // Simple poll
+                    await new Promise(resolve => {
+                        const poller = setInterval(async () => {
+                            try {
+                                const sRes = await fetch(`/status/${data.job_id}`);
+                                const sData = await sRes.json();
+                                if (sData.status === 'completed' || sData.status === 'error') {
+                                    clearInterval(poller);
+                                    if (sData.status === 'error') log(`Error: ${sData.message}`, 'red');
+                                    else log(`Completed successfully.`, 'green');
+                                    resolve();
+                                }
+                            } catch (e) { clearInterval(poller); resolve(); }
+                        }, 2000);
+                    });
+
+                } catch (e) {
+                    log(`Failed: ${e.message}`, 'red');
+                }
+
+                document.getElementById('progressFill').style.width = `${((i + 1) / fileBatch.length) * 100}%`;
+                document.getElementById('progressText').textContent = `${Math.round(((i + 1) / fileBatch.length) * 100)}%`;
+            }
+
+            log("Batch processing finished.");
+            if (currentJobIds.length > 0) {
+                setTimeout(() => {
+                    // Optionally switch to projects tab
+                    if (confirm("Processing complete! Switch to Projects tab to view results?")) {
+                        switchTab('projects');
+                    }
+                }, 500);
+            }
+        }
+
+        // --- PALETTES ---
+        // Palettes are passed from backend via JSON script tag
+        let PALETTES = {};
+        try {
+            PALETTES = JSON.parse(document.getElementById('palette-data').textContent);
+        } catch (e) {
+            console.error("Failed to parse palette data", e);
+        }
+        let selectedPalette = "{{ default_settings.color_palette }}";
+
+        function renderPalettes() {
+            const grid = document.getElementById('paletteGrid');
+            if (!grid) return;
+            grid.innerHTML = Object.keys(PALETTES).map(name => {
+                const colors = PALETTES[name];
+                // Handle both hex and [r,g,b] formats if mixed, though backend sends [r,g,b]
+                const colorDivs = colors.map(c => {
+                    const colorStyle = Array.isArray(c) ? `rgb(${c[0]},${c[1]},${c[2]})` : c;
+                    return `<div class="palette-color-slice" style="background:${colorStyle}"></div>`;
+                }).join('');
+
+                return `
+                <div class="palette-option ${name === selectedPalette ? 'selected' : ''}" onclick="selectPalette('${name}')">
+                    <div style="font-weight:500; font-size:0.9em;">${name}</div>
+                    <div class="palette-preview-bar">
+                        ${colorDivs}
+                    </div>
+                </div>
+            `}).join('');
+
+            // Also update hidden select for form compatibility if needed
+            const selInfo = document.getElementById('colorPaletteSelect');
+            if (selInfo) selInfo.value = selectedPalette;
+        }
+
+        function selectPalette(name) {
+            selectedPalette = name;
+            renderPalettes();
+        }
+
+        document.addEventListener('DOMContentLoaded', renderPalettes);
+
+        // --- PROJECTS & MULTI-VIEW ---
+        let selectedProjectIds = new Set();
+
+        async function loadProjects(force = false) {
+            const list = document.getElementById('project-list');
+            const loader = document.getElementById('project-list-loading');
+            const none = document.getElementById('no-projects-view');
+            const badge = document.getElementById('projectCountBadge');
+
+            list.innerHTML = '';
+            loader.style.display = 'block';
+            none.style.display = 'none';
+
+            try {
+                let url = '/api/jobs';
+                if (force) url += '?refresh=true';
+                const res = await fetch(url);
+                const jobs = await res.json();
+                loader.style.display = 'none';
+
+                if (!jobs || jobs.length === 0) {
+                    none.style.display = 'block';
+                    badge.style.display = 'none';
+                    return;
+                }
+
+                badge.textContent = jobs.length;
+                badge.style.display = 'inline-block';
+
+                jobs.forEach(job => {
+                    const card = document.createElement('div');
+                    card.className = `project-card ${selectedProjectIds.has(job.id) ? 'selected' : ''}`;
+                    card.dataset.id = job.id; // Store ID for easy access
+                    card.onclick = (e) => toggleProject(job.id, card, e);
+                    card.innerHTML = `
+                        <input type="checkbox" class="project-select" ${selectedProjectIds.has(job.id) ? 'checked' : ''}>
+                        <h3 class="project-title">${job.name}</h3>
+                        <div class="project-meta"><i class="far fa-clock"></i> ${job.date || 'N/A'}</div>
+                        <div class="project-meta project-id">ID: ${job.id.substring(0, 8)}...</div>
+                        <div style="margin-top:12px; display:flex; gap:8px;">
+                            <a href="/download/${job.id}" class="btn btn-secondary" style="padding:6px 12px; font-size:0.8em;" onclick="event.stopPropagation()">ZIP</a>
+                            <button class="btn btn-secondary" style="padding:6px 12px; font-size:0.8em; color:var(--danger); border-color:var(--danger);" onclick="deleteProject('${job.id}', event)">Delete</button>
+                        </div>
+                    `;
+                    list.appendChild(card);
+                });
+
+                loadSavedViews(); // Load saved views after projects
+
+            } catch (e) { console.error(e); }
+        }
+
+        // --- SAVED VIEWS LOGIC ---
+        async function loadSavedViews() {
+            const section = document.getElementById('saved-views-section');
+            const grid = document.getElementById('saved-views-grid');
+
+            try {
+                const res = await fetch('/api/saved-views');
+                const views = await res.json();
+
+                if (views.length > 0) {
+                    section.style.display = 'block';
+                    grid.innerHTML = views.map(view => `
+                        <div class="project-card" onclick="applySavedView('${view.job_ids_str}')" style="cursor:pointer; border-left: 4px solid var(--secondary);">
+                            <h3 class="project-title" style="margin-bottom:4px; font-size:1em;">${view.name}</h3>
+                            <div class="project-meta" style="margin-bottom:8px;">
+                                <span style="background:var(--gray-200); padding:2px 6px; border-radius:4px; font-size:0.8em; font-weight:600;">
+                                    ${view.job_ids.length} projects
+                                </span>
+                            </div>
+                            <div class="project-meta"><i class="far fa-clock"></i> ${view.date}</div>
+                            <button class="btn-icon" style="position:absolute; top:8px; right:8px;" 
+                                onclick="deleteSavedView(${view.id}, event)" title="Delete View">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    `).join('');
+                } else {
+                    section.style.display = 'none';
+                }
+            } catch (e) {
+                console.error("Error loading saved views:", e);
+                section.style.display = 'none';
+            }
+        }
+
+        async function saveViewSelection() {
+            if (selectedProjectIds.size === 0) return;
+            const name = prompt("Enter a name for this group of projects:");
+            if (!name) return;
+
+            try {
+                const res = await fetch('/api/saved-views', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name: name,
+                        job_ids: Array.from(selectedProjectIds)
+                    })
+                });
+
+                if (res.ok) {
+                    // alert("View saved!"); 
+                    loadSavedViews();
+                } else {
+                    alert("Failed to save view.");
+                }
+            } catch (e) {
+                console.error(e);
+                alert("Error saving view.");
+            }
+        }
+
+        async function deleteSavedView(id, e) {
+            e.stopPropagation();
+            if (!confirm("Delete this saved view?")) return;
+
+            try {
+                await fetch(`/api/saved-views/${id}`, { method: 'DELETE' });
+                loadSavedViews();
+            } catch (e) { console.error(e); }
+        }
+
+        function applySavedView(idsStr) {
+            clearSelection();
+            if (!idsStr) return;
+
+            const ids = idsStr.split(',');
+
+            // Loop through all project cards and select matching ones
+            ids.forEach(id => {
+                const card = document.querySelector(`.project-card[data-id="${id}"]`);
+                if (card) {
+                    // Update Set
+                    selectedProjectIds.add(id);
+                    // Update Visuals
+                    card.classList.add('selected');
+                    const cb = card.querySelector('input');
+                    if (cb) cb.checked = true;
+                }
+            });
+
+            updateFooter();
+        }
+
+        function toggleProject(id, card, e) {
+            // Prevent triggering if clicking buttons
+            if (e.target.tagName === 'BUTTON' || e.target.tagName === 'A') return;
+
+            if (selectedProjectIds.has(id)) {
+                selectedProjectIds.delete(id);
+                card.classList.remove('selected');
+                card.querySelector('input').checked = false;
+            } else {
+                selectedProjectIds.add(id);
+                card.classList.add('selected');
+                card.querySelector('input').checked = true;
+            }
+            updateFooter();
+        }
+
+        function updateFooter() {
+            const f = document.getElementById('multiGridFooter');
+            const c = document.getElementById('selectionCount');
+            c.textContent = selectedProjectIds.size;
+            if (selectedProjectIds.size > 0) f.classList.add('show');
+            else f.classList.remove('show');
+        }
+
+        function clearSelection() {
+            selectedProjectIds.clear();
+            document.querySelectorAll('.project-card.selected').forEach(c => {
+                c.classList.remove('selected');
+                c.querySelector('input').checked = false;
+            });
+            const selectAll = document.getElementById('selectAllProjects');
+            if (selectAll) selectAll.checked = false;
+            updateFooter();
+        }
+
+        function toggleSelectAll(cb) {
+            const cards = document.querySelectorAll('#project-list .project-card');
+            cards.forEach(card => {
+                if (card.style.display === 'none') return; // Skip hidden (filtered) projects
+
+                const id = card.dataset.id;
+                const checkbox = card.querySelector('input');
+
+                if (cb.checked) {
+                    selectedProjectIds.add(id);
+                    card.classList.add('selected');
+                    if (checkbox) checkbox.checked = true;
+                } else {
+                    selectedProjectIds.delete(id);
+                    card.classList.remove('selected');
+                    if (checkbox) checkbox.checked = false;
+                }
+            });
+            updateFooter();
+        }
+
+        async function deleteSelectedProjects() {
+            if (selectedProjectIds.size === 0) return;
+            if (!confirm(`Are you sure you want to delete ${selectedProjectIds.size} selected projects?`)) return;
+
+            const ids = Array.from(selectedProjectIds);
+            try {
+                const res = await fetch('/api/cleanup-batch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ job_ids: ids })
+                });
+
+                if (res.ok) {
+                    clearSelection();
+                    loadProjects(true);
+                } else {
+                    alert("Failed to delete some projects.");
+                }
+            } catch (e) {
+                console.error(e);
+                alert("Error during batch delete.");
+            }
+        }
+
+        function viewSelectedProjects() {
+            if (selectedProjectIds.size === 0) return;
+            window.location.href = `/view_multi?jobs=${Array.from(selectedProjectIds).join(',')}`;
+        }
+
+        async function deleteProject(id, e) {
+            e.stopPropagation();
+            if (!confirm("Delete this project?")) return;
+            await fetch(`/cleanup/${id}`);
+            loadProjects();
+        }
+        // --- THEME TOGGLE ---
+        const themeToggle = document.getElementById('theme-toggle');
+        const body = document.body;
+        const icon = themeToggle.querySelector('i');
+
+        // Check saved
+        if (localStorage.getItem('theme') === 'dark') {
+            body.setAttribute('data-theme', 'dark');
+            icon.classList.remove('fa-moon');
+            icon.classList.add('fa-sun');
+        }
+
+        themeToggle.addEventListener('click', () => {
+            if (body.getAttribute('data-theme') === 'dark') {
+                body.removeAttribute('data-theme');
+                localStorage.setItem('theme', 'light');
+                icon.classList.remove('fa-sun');
+                icon.classList.add('fa-moon');
+            } else {
+                body.setAttribute('data-theme', 'dark');
+                localStorage.setItem('theme', 'dark');
+                icon.classList.remove('fa-moon');
+                icon.classList.add('fa-sun');
+            }
+        });
+
+        function filterProjects() {
+            const query = document.getElementById('projectSearch').value.toLowerCase();
+            const cards = document.querySelectorAll('#project-list .project-card');
+            let visibleCount = 0;
+
+            cards.forEach(card => {
+                const title = card.querySelector('.project-title').textContent.toLowerCase();
+                if (title.includes(query)) {
+                    card.style.display = 'block';
+                    visibleCount++;
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+
+            const none = document.getElementById('no-projects-view');
+            const p = none.querySelector('p');
+
+            if (visibleCount === 0 && cards.length > 0) {
+                none.style.display = 'block';
+                if (p) p.textContent = 'No projects match your search.';
+            } else if (cards.length > 0) {
+                none.style.display = 'none';
+                if (p) p.textContent = "No processed projects found. Go to 'Files' to upload data.";
+            }
+        }
+        // ===== PROFILE POPUP =====
+        function openProfilePopup() {
+            document.getElementById('profileBackdrop').classList.add('active');
+            document.getElementById('profilePopup').classList.add('active');
+            loadProfile();
+        }
+        function closeProfilePopup() {
+            document.getElementById('profileBackdrop').classList.remove('active');
+            document.getElementById('profilePopup').classList.remove('active');
+            document.getElementById('profileSaveStatus').textContent = '';
+        }
+
+        async function loadProfile() {
+            try {
+                const res = await fetch('/api/profile');
+                const data = await res.json();
+                document.getElementById('profileEmailDisplay').textContent = data.email || '';
+                document.getElementById('profileName').value = data.display_name || '';
+                document.getElementById('profileCompany').value = data.company_name || '';
+
+                // Update avatar in popup
+                const avatarEl = document.getElementById('profileAvatarLarge');
+                if (data.photo_url) {
+                    avatarEl.innerHTML = `<img src="${data.photo_url}?t=${Date.now()}" alt="Profile">`;
+                } else {
+                    avatarEl.innerHTML = '<span class="avatar-placeholder"><i class="fas fa-user"></i></span>';
+                }
+
+                // Update header icon
+                updateHeaderIcon(data.photo_url);
+            } catch (e) {
+                console.error('Failed to load profile:', e);
+            }
+        }
+
+        function updateHeaderIcon(photoUrl) {
+            const placeholder = document.getElementById('profileIconPlaceholder');
+            const img = document.getElementById('profileIconImg');
+            if (photoUrl) {
+                img.src = photoUrl + '?t=' + Date.now();
+                img.style.display = 'block';
+                placeholder.style.display = 'none';
+            } else {
+                img.style.display = 'none';
+                placeholder.style.display = 'inline';
+            }
+        }
+
+        async function saveProfile() {
+            const statusEl = document.getElementById('profileSaveStatus');
+            statusEl.textContent = 'Saving...';
+            statusEl.style.color = 'var(--text-secondary)';
+
+            const formData = new FormData();
+            formData.append('display_name', document.getElementById('profileName').value);
+            formData.append('company_name', document.getElementById('profileCompany').value);
+
+            const photoInput = document.getElementById('profilePhoto');
+            if (photoInput.files.length > 0) {
+                formData.append('photo', photoInput.files[0]);
+            }
+
+            try {
+                const res = await fetch('/api/profile', { method: 'POST', body: formData });
+                const data = await res.json();
+                if (data.success) {
+                    statusEl.textContent = '✓ Profile saved successfully!';
+                    statusEl.style.color = 'var(--primary)';
+
+                    // Update avatar in popup
+                    if (data.photo_url) {
+                        document.getElementById('profileAvatarLarge').innerHTML = `<img src="${data.photo_url}?t=${Date.now()}" alt="Profile">`;
+                    }
+                    updateHeaderIcon(data.photo_url);
+
+                    // Clear file input
+                    photoInput.value = '';
+
+                    setTimeout(() => { statusEl.textContent = ''; }, 3000);
+                } else {
+                    statusEl.textContent = '✗ Error: ' + (data.error || 'Unknown');
+                    statusEl.style.color = 'var(--danger)';
+                }
+            } catch (e) {
+                statusEl.textContent = '✗ Network error';
+                statusEl.style.color = 'var(--danger)';
+            }
+        }
+
+        // Load profile icon on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            fetch('/api/profile').then(r => r.json()).then(data => {
+                updateHeaderIcon(data.photo_url);
+            }).catch(() => { });
+        });
+    </script>
+    <script src="/static/splash_cursor.js"></script>
+    <script src="/static/earth.js"></script>
+    <script src="/static/text_type.js"></script>
+</body>
+
+</html>

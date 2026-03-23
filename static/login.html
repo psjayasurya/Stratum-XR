@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPR Explorer | Login</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+
+<body>
+    <div class="grid-bg"></div>
+    <div class="map-overlay"></div>
+    <div class="scan-line"></div>
+
+    <div class="container">
+        <h2>GPR Explorer</h2>
+        <p class="subtitle">Subsurface Interface Login</p>
+
+        {% if error %}
+        <div class="error-msg">
+            <i class="fas fa-radiation"></i> SIGNAL INTERFERENCE: {{ error }}
+        </div>
+        {% endif %}
+
+        <form method="POST">
+            <div class="form-group">
+                <i class="fas fa-user-gear"></i>
+                <input type="email" name="email" placeholder="Operator Email" required autocomplete="email">
+            </div>
+
+            <div class="form-group">
+                <i class="fas fa-fingerprint"></i>
+                <input type="password" name="password" placeholder="Password" required
+                    autocomplete="current-password">
+            </div>
+
+            <button type="submit">Login <i class="fas fa-wave-square"></i></button>
+        </form>
+
+        <div class="footer-links">
+            <p>New Register? <a href="/register">Register</a></p>
+        </div>
+    </div>
+</body>
+
+</html>
