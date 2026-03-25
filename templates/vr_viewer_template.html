@@ -9487,7 +9487,25 @@
             const grp = renderer.xr.getControllerGrip(c === controller0 ? 0 : 1);
             grp.add(controllerModelFactory.createControllerModel(grp));
             cameraRig.add(grp);
-            c.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -1)]), new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 })));
+
+            // Blue laser ray for controller pointing
+            const laserLength = 1.0;
+            const laserLine = new THREE.Line(
+                new THREE.BufferGeometry().setFromPoints([
+                    new THREE.Vector3(0, 0, 0),
+                    new THREE.Vector3(0, 0, -laserLength)
+                ]),
+                new THREE.LineBasicMaterial({ color: 0x3b82f6, transparent: true, opacity: 0.9 })
+            );
+            c.add(laserLine);
+
+            // Pointer dot at the laser tip to improve target precision
+            const laserPointer = new THREE.Mesh(
+                new THREE.SphereGeometry(0.012, 12, 12),
+                new THREE.MeshBasicMaterial({ color: 0x60a5fa })
+            );
+            laserPointer.position.set(0, 0, -laserLength);
+            c.add(laserPointer);
         });
 
         // ============ VR TUTORIAL MANAGER ============
@@ -9798,19 +9816,1064 @@
         const vrTutorial = new VRTutorialManager();
         window.vrTutorial = vrTutorial;
 
+        class VRFeaturePanelManager {
+            constructor() {
+                this.active = false;
+                this.panelGroup = new THREE.Group();
+                this.canvas = document.createElement('canvas');
+                this.canvas.width = 1024;
+                this.canvas.height = 1024;
+                this.ctx = this.canvas.getContext('2d');
+                this.texture = new THREE.CanvasTexture(this.canvas);
+
+                this.tabs = [
+                    { id: 'layers', label: 'Layers' },
+                    { id: 'slices', label: 'Depth Slices' },
+                    { id: 'view', label: 'View' },
+                    { id: 'mesh', label: 'Mesh & LiDAR' },
+                    { id: 'geo', label: 'Geo' },
+                    { id: 'survey', label: 'Survey Plan' },
+                    { id: 'ruler', label: 'Ruler' },
+                    { id: 'annotations', label: 'Annotations' },
+                    { id: 'collab', label: 'Collaboration' },
+                    { id: 'about', label: 'Info' }
+                ];
+                this.tabRects = [];
+                this.closeRect = { x: 736, y: 922, w: 240, h: 74 };
+                this.lastOpenedTab = '';
+                this.statusMessage = '';
+                this.mode = 'menu';
+                this.nativeTabId = '';
+                this.buttons = [];
+                this.pointShapes = ['square', 'circle', 'diamond', 'cross', 'plus'];
+
+                // Keyboard state for VR text input
+                this.keyboardMode = null;  // 'label' or 'note'
+                this.keyboardInput = '';
+                this.keyboardRows = [
+                    ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P'],
+                    ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L'],
+                    ['Z', 'X', 'C', 'V', 'B', 'N', 'M', ' ', '←', '–']
+                ];
+
+                const panelGeo = new THREE.PlaneGeometry(0.86, 0.86);
+                this.panelMesh = new THREE.Mesh(panelGeo, new THREE.MeshStandardMaterial({
+                    map: this.texture,
+                    transparent: true,
+                    opacity: 0.96,
+                    roughness: 0.12,
+                    metalness: 0
+                }));
+
+                this.panelGroup.add(this.panelMesh);
+                this.panelGroup.visible = false;
+                scene.add(this.panelGroup);
+                this.render();
+            }
+
+            render() {
+                const ctx = this.ctx;
+                ctx.clearRect(0, 0, 1024, 1024);
+
+                ctx.fillStyle = 'rgba(10, 15, 25, 0.9)';
+                this.roundRect(ctx, 0, 0, 1024, 1024, 40, true);
+
+                const headGrad = ctx.createLinearGradient(0, 0, 1024, 0);
+                headGrad.addColorStop(0, '#0ea5e9');
+                headGrad.addColorStop(1, '#2563eb');
+                ctx.fillStyle = headGrad;
+                this.roundRect(ctx, 0, 0, 1024, 138, { tl: 40, tr: 40, bl: 0, br: 0 }, true);
+
+                ctx.strokeStyle = 'rgba(255,255,255,0.16)';
+                ctx.lineWidth = 4;
+                this.roundRect(ctx, 2, 2, 1020, 1020, 40, false, true);
+
+                ctx.fillStyle = '#ffffff';
+                ctx.font = "700 50px 'Inter', sans-serif";
+                ctx.textAlign = 'center';
+                ctx.fillText('VR Feature Panel', 512, 82);
+
+                ctx.fillStyle = '#d1d5db';
+                ctx.font = "500 24px 'Inter', sans-serif";
+                ctx.fillText('Point controller ray and press Trigger to open a feature tab', 512, 118);
+
+                this.buttons = [];
+                if (this.mode === 'menu') {
+                    this.renderMenuContent(ctx);
+                } else if (this.mode === 'layers') {
+                    this.renderLayersContent(ctx);
+                } else if (this.mode === 'slices') {
+                    this.renderSlicesContent(ctx);
+                } else if (this.mode === 'mesh') {
+                    this.renderMeshContent(ctx);
+                } else if (this.mode === 'geo') {
+                    this.renderGeoContent(ctx);
+                } else if (this.mode === 'survey') {
+                    this.renderSurveyContent(ctx);
+                } else if (this.mode === 'annotations') {
+                    this.renderAnnotationsContent(ctx);
+                } else if (this.mode === 'ann_keyboard') {
+                    this.renderKeyboardInput(ctx);
+                } else {
+                    this.renderGenericTabContent(ctx);
+                }
+
+                this.texture.needsUpdate = true;
+            }
+
+            renderMenuContent(ctx) {
+                this.tabRects = [];
+
+                const left = 54;
+                const top = 178;
+                const colGap = 26;
+                const rowGap = 18;
+                const colW = 445;
+                const rowH = 120;
+
+                this.tabRects = [];
+                this.tabs.forEach((tab, i) => {
+                    const col = i % 2;
+                    const row = Math.floor(i / 2);
+                    const x = left + col * (colW + colGap);
+                    const y = top + row * (rowH + rowGap);
+                    const isActive = this.lastOpenedTab === tab.id;
+
+                    ctx.fillStyle = isActive ? 'rgba(14,165,233,0.28)' : 'rgba(255,255,255,0.08)';
+                    this.roundRect(ctx, x, y, colW, rowH, 18, true);
+
+                    ctx.strokeStyle = isActive ? 'rgba(56,189,248,0.95)' : 'rgba(255,255,255,0.12)';
+                    ctx.lineWidth = 2;
+                    this.roundRect(ctx, x, y, colW, rowH, 18, false, true);
+
+                    ctx.fillStyle = '#f8fafc';
+                    ctx.font = "700 34px 'Inter', sans-serif";
+                    ctx.textAlign = 'left';
+                    ctx.fillText(tab.label, x + 24, y + 72);
+
+                    this.tabRects.push({ x, y, w: colW, h: rowH, tabId: tab.id });
+                    this.buttons.push({ x, y, w: colW, h: rowH, action: `open:${tab.id}` });
+                });
+
+                ctx.fillStyle = (this.statusMessage || this.lastOpenedTab) ? '#38bdf8' : '#94a3b8';
+                ctx.font = "600 24px 'Inter', sans-serif";
+                ctx.textAlign = 'left';
+                const statusText = this.statusMessage || (this.lastOpenedTab
+                    ? `Last opened: ${this.tabs.find(t => t.id === this.lastOpenedTab)?.label || ''}`
+                    : 'No tab opened yet');
+                ctx.fillText(statusText, 58, 908);
+
+                ctx.fillStyle = 'rgba(255,255,255,0.12)';
+                this.roundRect(ctx, this.closeRect.x, this.closeRect.y, this.closeRect.w, this.closeRect.h, 16, true);
+                ctx.strokeStyle = 'rgba(255,255,255,0.26)';
+                this.roundRect(ctx, this.closeRect.x, this.closeRect.y, this.closeRect.w, this.closeRect.h, 16, false, true);
+                ctx.fillStyle = '#e5e7eb';
+                ctx.font = "700 30px 'Inter', sans-serif";
+                ctx.textAlign = 'center';
+                ctx.fillText('CLOSE', this.closeRect.x + this.closeRect.w / 2, this.closeRect.y + 48);
+                this.buttons.push({
+                    x: this.closeRect.x,
+                    y: this.closeRect.y,
+                    w: this.closeRect.w,
+                    h: this.closeRect.h,
+                    action: 'close'
+                });
+            }
+
+            renderHeaderActionButtons(ctx) {
+                const back = { x: 36, y: 24, w: 150, h: 70 };
+                const close = { x: 838, y: 24, w: 150, h: 70 };
+
+                ctx.fillStyle = 'rgba(255,255,255,0.14)';
+                this.roundRect(ctx, back.x, back.y, back.w, back.h, 14, true);
+                this.roundRect(ctx, close.x, close.y, close.w, close.h, 14, true);
+
+                ctx.strokeStyle = 'rgba(255,255,255,0.28)';
+                this.roundRect(ctx, back.x, back.y, back.w, back.h, 14, false, true);
+                this.roundRect(ctx, close.x, close.y, close.w, close.h, 14, false, true);
+
+                ctx.fillStyle = '#f8fafc';
+                ctx.font = "700 28px 'Inter', sans-serif";
+                ctx.textAlign = 'center';
+                ctx.fillText('BACK', back.x + back.w / 2, back.y + 45);
+                ctx.fillText('CLOSE', close.x + close.w / 2, close.y + 45);
+
+                this.buttons.push({ ...back, action: 'back' });
+                this.buttons.push({ ...close, action: 'close' });
+            }
+
+            renderActionButton(ctx, x, y, w, h, text, action, color = 'rgba(255,255,255,0.1)') {
+                ctx.fillStyle = color;
+                this.roundRect(ctx, x, y, w, h, 14, true);
+                ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+                this.roundRect(ctx, x, y, w, h, 14, false, true);
+                ctx.fillStyle = '#f8fafc';
+                ctx.font = "700 24px 'Inter', sans-serif";
+                ctx.textAlign = 'center';
+                ctx.fillText(text, x + w / 2, y + h / 2 + 8);
+                this.buttons.push({ x, y, w, h, action });
+            }
+
+            renderLayersContent(ctx) {
+                this.renderHeaderActionButtons(ctx);
+
+                ctx.fillStyle = '#e2e8f0';
+                ctx.font = "700 44px 'Inter', sans-serif";
+                ctx.textAlign = 'center';
+                ctx.fillText('Layers & Point Cloud (VR Native)', 512, 170);
+
+                const showPointsCb = document.getElementById('showPoints');
+                const sizeSlider = document.getElementById('sizeSlider');
+                const isoSlider = document.getElementById('isoSlider');
+                const linkAll = document.getElementById('linkAllGrids');
+
+                const pointSizeVal = sizeSlider ? parseFloat(sizeSlider.value || '0') : 0;
+                const isoVal = isoSlider ? parseFloat(isoSlider.value || '0') : 0;
+                const pointShape = window.currentPointShape || 'square';
+                const syncState = linkAll ? !!linkAll.checked : !!window.linkAllGrids;
+
+                ctx.fillStyle = '#93c5fd';
+                ctx.font = "600 26px 'Inter', sans-serif";
+                ctx.textAlign = 'left';
+                ctx.fillText(`Model: ${showPointsCb && showPointsCb.checked ? 'Visible' : 'Hidden'}`, 60, 240);
+                ctx.fillText(`Point Size: ${pointSizeVal.toFixed(3)}`, 60, 274);
+                ctx.fillText(`Amplitude Filter: ${isoVal.toFixed(0)}`, 60, 308);
+                ctx.fillText(`Shape: ${pointShape}`, 60, 342);
+                ctx.fillText(`Sync All Grids: ${syncState ? 'ON' : 'OFF'}`, 60, 376);
+
+                this.renderActionButton(ctx, 60, 420, 290, 78, showPointsCb && showPointsCb.checked ? 'Hide Model' : 'Show Model', 'layers.toggleModel', 'rgba(14,165,233,0.35)');
+                this.renderActionButton(ctx, 370, 420, 290, 78, 'All Layers', 'layers.all', 'rgba(34,197,94,0.28)');
+                this.renderActionButton(ctx, 680, 420, 290, 78, 'No Layers', 'layers.none', 'rgba(248,113,113,0.28)');
+
+                this.renderActionButton(ctx, 60, 522, 290, 78, 'Cycle Layer', 'layers.cycle');
+                this.renderActionButton(ctx, 370, 522, 140, 78, 'Size -', 'layers.sizeDown');
+                this.renderActionButton(ctx, 520, 522, 140, 78, 'Size +', 'layers.sizeUp');
+                this.renderActionButton(ctx, 680, 522, 290, 78, 'Random Palette', 'layers.paletteRandom');
+
+                this.renderActionButton(ctx, 60, 624, 290, 78, 'Prev Shape', 'layers.shapePrev');
+                this.renderActionButton(ctx, 370, 624, 290, 78, 'Next Shape', 'layers.shapeNext');
+                this.renderActionButton(ctx, 680, 624, 290, 78, syncState ? 'Sync OFF' : 'Sync ON', 'layers.toggleSync');
+
+                this.renderActionButton(ctx, 60, 726, 290, 78, 'Amp -5', 'layers.isoDown');
+                this.renderActionButton(ctx, 370, 726, 290, 78, 'Amp +5', 'layers.isoUp');
+                this.renderActionButton(ctx, 680, 726, 290, 78, 'Refresh State', 'layers.refresh');
+
+                ctx.fillStyle = '#94a3b8';
+                ctx.font = "500 22px 'Inter', sans-serif";
+                ctx.fillText('These controls directly drive the same desktop layer logic, fully inside VR.', 60, 854);
+            }
+
+            renderSlicesContent(ctx) {
+                this.renderHeaderActionButtons(ctx);
+
+                const depth3D = document.getElementById('depthSliceToggle');
+                const depth2D = document.getElementById('depth2DSliceToggle');
+                const depthSlider = document.getElementById('depthSliceSlider');
+                const linkAll = document.getElementById('linkAllGrids');
+
+                const curDepth = depthSlider ? parseFloat(depthSlider.value || '0') : 0;
+                const minDepth = depthSlider ? parseFloat(depthSlider.min || '0') : 0;
+                const maxDepth = depthSlider ? parseFloat(depthSlider.max || '0') : 0;
+
+                ctx.fillStyle = '#e2e8f0';
+                ctx.font = "700 44px 'Inter', sans-serif";
+                ctx.textAlign = 'center';
+                ctx.fillText('Depth Slices (VR Native)', 512, 170);
+
+                ctx.fillStyle = '#93c5fd';
+                ctx.font = "600 26px 'Inter', sans-serif";
+                ctx.textAlign = 'left';
+                ctx.fillText(`3D Slice: ${depth3D && depth3D.checked ? 'ON' : 'OFF'}`, 60, 240);
+                ctx.fillText(`2D Slice: ${depth2D && depth2D.checked ? 'ON' : 'OFF'}`, 60, 274);
+                ctx.fillText(`Depth: ${curDepth.toFixed(1)}m (range ${minDepth.toFixed(1)} - ${maxDepth.toFixed(1)})`, 60, 308);
+                ctx.fillText(`Sync All Grids: ${linkAll && linkAll.checked ? 'ON' : 'OFF'}`, 60, 342);
+
+                this.renderActionButton(ctx, 60, 420, 290, 78, depth3D && depth3D.checked ? 'Disable 3D Slice' : 'Enable 3D Slice', 'slices.toggle3d', 'rgba(14,165,233,0.35)');
+                this.renderActionButton(ctx, 370, 420, 290, 78, depth2D && depth2D.checked ? 'Disable 2D Slice' : 'Enable 2D Slice', 'slices.toggle2d', 'rgba(168,85,247,0.28)');
+                this.renderActionButton(ctx, 680, 420, 290, 78, linkAll && linkAll.checked ? 'Sync OFF' : 'Sync ON', 'slices.toggleSync', 'rgba(34,197,94,0.28)');
+
+                this.renderActionButton(ctx, 60, 522, 290, 78, 'Depth -0.1m', 'slices.depthDown');
+                this.renderActionButton(ctx, 370, 522, 290, 78, 'Depth +0.1m', 'slices.depthUp');
+                this.renderActionButton(ctx, 680, 522, 290, 78, 'Apply Depth', 'slices.applyDepth');
+
+                this.renderActionButton(ctx, 60, 624, 290, 78, 'Depth Min', 'slices.depthMin');
+                this.renderActionButton(ctx, 370, 624, 290, 78, 'Depth Mid', 'slices.depthMid');
+                this.renderActionButton(ctx, 680, 624, 290, 78, 'Depth Max', 'slices.depthMax');
+
+                ctx.fillStyle = '#94a3b8';
+                ctx.font = "500 22px 'Inter', sans-serif";
+                ctx.fillText('Uses the same depth slicing functions as desktop mode.', 60, 854);
+            }
+
+            renderMeshContent(ctx) {
+                this.renderHeaderActionButtons(ctx);
+
+                const meshMode = document.getElementById('meshDataSelector');
+                const showMesh = document.getElementById('showMesh');
+                const showPly = document.getElementById('showPlySurface');
+                const showPotree = document.getElementById('showPotree');
+                const opSlider = document.getElementById('meshOpacitySlider');
+                const ySlider = document.getElementById('meshPosYSlider');
+
+                const modeVal = meshMode ? meshMode.value : 'cloud';
+                const opVal = opSlider ? parseFloat(opSlider.value || '1') : 1;
+                const yVal = ySlider ? parseFloat(ySlider.value || '0') : 0;
+
+                ctx.fillStyle = '#e2e8f0';
+                ctx.font = "700 44px 'Inter', sans-serif";
+                ctx.textAlign = 'center';
+                ctx.fillText('Mesh & LiDAR (VR Native)', 512, 170);
+
+                ctx.fillStyle = '#93c5fd';
+                ctx.font = "600 24px 'Inter', sans-serif";
+                ctx.textAlign = 'left';
+                ctx.fillText(`Active Mode: ${modeVal}`, 60, 236);
+                ctx.fillText(`Show Mesh: ${showMesh && showMesh.checked ? 'ON' : 'OFF'}`, 60, 268);
+                ctx.fillText(`Show PLY Surface: ${showPly && showPly.checked ? 'ON' : 'OFF'}`, 60, 300);
+                ctx.fillText(`Show Potree: ${showPotree && showPotree.checked ? 'ON' : 'OFF'}`, 60, 332);
+                ctx.fillText(`Mesh Opacity: ${opVal.toFixed(2)} | Mesh Y: ${yVal.toFixed(1)}m`, 60, 364);
+
+                this.renderActionButton(ctx, 60, 420, 290, 78, 'Mode: Cloud', 'mesh.mode.cloud', 'rgba(16,185,129,0.28)');
+                this.renderActionButton(ctx, 370, 420, 290, 78, 'Mode: PLY', 'mesh.mode.ply', 'rgba(14,165,233,0.28)');
+                this.renderActionButton(ctx, 680, 420, 290, 78, 'Mode: Potree', 'mesh.mode.potree', 'rgba(168,85,247,0.28)');
+
+                this.renderActionButton(ctx, 60, 522, 290, 78, 'Load Cloud Mesh', 'mesh.loadCloud');
+                this.renderActionButton(ctx, 370, 522, 290, 78, 'Load PLY Surface', 'mesh.loadPly');
+                this.renderActionButton(ctx, 680, 522, 290, 78, 'Load Potree', 'mesh.loadPotree');
+
+                this.renderActionButton(ctx, 60, 624, 290, 78, showMesh && showMesh.checked ? 'Hide Mesh' : 'Show Mesh', 'mesh.toggleShowMesh');
+                this.renderActionButton(ctx, 370, 624, 290, 78, showPly && showPly.checked ? 'Hide PLY' : 'Show PLY', 'mesh.toggleShowPly');
+                this.renderActionButton(ctx, 680, 624, 290, 78, showPotree && showPotree.checked ? 'Hide Potree' : 'Show Potree', 'mesh.toggleShowPotree');
+
+                this.renderActionButton(ctx, 60, 726, 220, 78, 'Opacity -', 'mesh.opacityDown');
+                this.renderActionButton(ctx, 290, 726, 220, 78, 'Opacity +', 'mesh.opacityUp');
+                this.renderActionButton(ctx, 520, 726, 220, 78, 'Mesh Y -', 'mesh.posYDown');
+                this.renderActionButton(ctx, 750, 726, 220, 78, 'Mesh Y +', 'mesh.posYUp');
+
+                this.renderActionButton(ctx, 370, 822, 290, 72, 'Auto-Fit Mesh to Map', 'mesh.autoFit', 'rgba(245,158,11,0.25)');
+            }
+
+            renderGeoContent(ctx) {
+                this.renderHeaderActionButtons(ctx);
+
+                const showKml = document.getElementById('showKML');
+                const mapType = document.getElementById('mapType');
+                const mapZoom = document.getElementById('mapZoom');
+                const lat = document.getElementById('originLat');
+                const lon = document.getElementById('originLon');
+                const alt = document.getElementById('originAlt');
+                const gOpacity = document.getElementById('groundOpacitySlider');
+
+                ctx.fillStyle = '#e2e8f0';
+                ctx.font = "700 44px 'Inter', sans-serif";
+                ctx.textAlign = 'center';
+                ctx.fillText('Geo-Reference & Alignment (VR Native)', 512, 170);
+
+                ctx.fillStyle = '#93c5fd';
+                ctx.font = "600 24px 'Inter', sans-serif";
+                ctx.textAlign = 'left';
+                ctx.fillText(`KML Boundary: ${showKml && showKml.checked ? 'ON' : 'OFF'}`, 60, 236);
+                ctx.fillText(`Map Type: ${mapType ? mapType.value : 'n/a'} | Zoom: ${mapZoom ? mapZoom.value : 'n/a'}`, 60, 268);
+                ctx.fillText(`Anchor: ${lat ? lat.value : '--'}, ${lon ? lon.value : '--'}, Alt ${alt ? alt.value : '--'}m`, 60, 300);
+                ctx.fillText(`Ground Opacity: ${gOpacity ? parseFloat(gOpacity.value || '1').toFixed(1) : '1.0'}`, 60, 332);
+
+                this.renderActionButton(ctx, 60, 420, 290, 78, showKml && showKml.checked ? 'Hide KML' : 'Show KML', 'geo.toggleKml', 'rgba(250,204,21,0.28)');
+                this.renderActionButton(ctx, 370, 420, 290, 78, 'Start Drawing', 'geo.startAlign', 'rgba(16,185,129,0.28)');
+                this.renderActionButton(ctx, 680, 420, 290, 78, 'Finish & Fit', 'geo.finishAlign', 'rgba(59,130,246,0.28)');
+
+                this.renderActionButton(ctx, 60, 522, 290, 78, 'Clear Points', 'geo.clearAlign');
+                this.renderActionButton(ctx, 370, 522, 290, 78, 'Set Anchor', 'geo.setAnchor');
+                this.renderActionButton(ctx, 680, 522, 290, 78, 'Copy Coords', 'geo.copyCoords');
+
+                this.renderActionButton(ctx, 60, 624, 290, 78, 'Map Type Next', 'geo.mapTypeNext');
+                this.renderActionButton(ctx, 370, 624, 290, 78, 'Zoom Next', 'geo.zoomNext');
+                this.renderActionButton(ctx, 680, 624, 290, 78, 'Open Cesium', 'geo.openCesium', 'rgba(37,99,235,0.28)');
+
+                this.renderActionButton(ctx, 60, 726, 290, 78, 'Ground Opacity -', 'geo.groundOpacityDown');
+                this.renderActionButton(ctx, 370, 726, 290, 78, 'Ground Opacity +', 'geo.groundOpacityUp');
+                this.renderActionButton(ctx, 680, 726, 290, 78, 'Multi-Grid View', 'geo.multiGrid');
+            }
+
+            renderSurveyContent(ctx) {
+                this.renderHeaderActionButtons(ctx);
+
+                const spacing = document.getElementById('surveyGridSpacingSlider');
+                const showGen = document.getElementById('showSurveyGeneratedGrid');
+                const status = document.getElementById('surveyGridDrawStatus');
+                const insightArea = document.getElementById('surveyInsightArea');
+                const insightLines = document.getElementById('surveyInsightTotalLines');
+                const weather = document.getElementById('surveyWeatherStatus');
+
+                ctx.fillStyle = '#e2e8f0';
+                ctx.font = "700 44px 'Inter', sans-serif";
+                ctx.textAlign = 'center';
+                ctx.fillText('Survey Plan & Coverage (VR Native)', 512, 170);
+
+                ctx.fillStyle = '#93c5fd';
+                ctx.font = "600 24px 'Inter', sans-serif";
+                ctx.textAlign = 'left';
+                ctx.fillText(`Grid Spacing: ${spacing ? spacing.value : '--'} m`, 60, 236);
+                ctx.fillText(`Generated Grid Visible: ${showGen && showGen.checked ? 'ON' : 'OFF'}`, 60, 268);
+                ctx.fillText(`Status: ${status ? status.textContent : 'Ready'}`, 60, 300);
+                ctx.fillText(`Insights: Area ${insightArea ? insightArea.textContent : '--'} | Lines ${insightLines ? insightLines.textContent : '--'}`, 60, 332);
+                ctx.fillText(`Weather: ${weather ? weather.textContent : 'Unknown'}`, 60, 364);
+
+                this.renderActionButton(ctx, 60, 420, 290, 78, 'Draw Polygon', 'survey.drawPoly', 'rgba(16,185,129,0.28)');
+                this.renderActionButton(ctx, 370, 420, 290, 78, 'Generate Grid', 'survey.generateGrid', 'rgba(59,130,246,0.28)');
+                this.renderActionButton(ctx, 680, 420, 290, 78, 'Clear Grid', 'survey.clearGrid', 'rgba(239,68,68,0.28)');
+
+                this.renderActionButton(ctx, 60, 522, 290, 78, 'Spacing -0.1', 'survey.spacingDown');
+                this.renderActionButton(ctx, 370, 522, 290, 78, 'Spacing +0.1', 'survey.spacingUp');
+                this.renderActionButton(ctx, 680, 522, 290, 78, showGen && showGen.checked ? 'Hide Grid' : 'Show Grid', 'survey.toggleGenerated');
+
+                this.renderActionButton(ctx, 60, 624, 290, 78, 'Refresh Weather', 'survey.refreshWeather');
+                this.renderActionButton(ctx, 370, 624, 290, 78, 'Export KML', 'survey.exportKML');
+                this.renderActionButton(ctx, 680, 624, 290, 78, 'Export SHP', 'survey.exportSHP');
+
+                this.renderActionButton(ctx, 60, 726, 290, 78, 'Survey Report', 'survey.report');
+                this.renderActionButton(ctx, 370, 726, 290, 78, 'Print Plan', 'survey.print');
+                this.renderActionButton(ctx, 680, 726, 290, 78, 'Apply Spacing', 'survey.applySpacing');
+            }
+
+            renderAnnotationsContent(ctx) {
+                this.renderHeaderActionButtons(ctx);
+
+                const ann = window.annMgr;
+                const activeTool = ann && ann.activeTool ? ann.activeTool : 'none';
+                const pending = ann && Array.isArray(ann.pendingPoints) ? ann.pendingPoints.length : 0;
+                const saved = ann && Array.isArray(ann.savedList) ? ann.savedList.length : 0;
+
+                // Get current annotation details from DOM (or use defaults for VR)
+                let currentLabel = 'Annotation';
+                let currentColor = '#f59e0b';
+                let currentNote = '';
+                try {
+                    const labelEl = document.getElementById('ann-label-input');
+                    if (labelEl && labelEl.value) currentLabel = labelEl.value;
+                    const colorEl = document.getElementById('ann-color-picker');
+                    if (colorEl && colorEl.value) currentColor = colorEl.value;
+                    const noteEl = document.getElementById('ann-note-input');
+                    if (noteEl && noteEl.value) currentNote = noteEl.value;
+                } catch (e) {
+                    // Defaults used if DOM not accessible
+                }
+
+                ctx.fillStyle = '#e2e8f0';
+                ctx.font = "700 44px 'Inter', sans-serif";
+                ctx.textAlign = 'center';
+                ctx.fillText('Annotations (VR Native)', 512, 170);
+
+                // --- ANNOTATION DETAILS SECTION ---
+                ctx.fillStyle = '#93c5fd';
+                ctx.font = "600 24px 'Inter', sans-serif";
+                ctx.textAlign = 'left';
+                ctx.fillText('ANNOTATION DETAILS', 60, 236);
+
+                // Label display and info
+                ctx.fillStyle = '#cbd5e1';
+                ctx.font = "400 18px 'Inter', sans-serif";
+                ctx.fillText('Label:', 60, 268);
+                ctx.fillStyle = '#e0e7ff';
+                ctx.font = "600 18px 'Inter', sans-serif";
+                ctx.fillText(currentLabel.substring(0, 40), 180, 268);
+
+                // Color display with preview
+                ctx.fillStyle = '#cbd5e1';
+                ctx.font = "400 18px 'Inter', sans-serif";
+                ctx.fillText('Color:', 60, 304);
+                // Draw color preview box
+                ctx.fillStyle = currentColor;
+                ctx.fillRect(180, 288, 40, 32);
+                ctx.strokeStyle = '#666';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(180, 288, 40, 32);
+
+                // Note display (truncated)
+                ctx.fillStyle = '#cbd5e1';
+                ctx.font = "400 18px 'Inter', sans-serif";
+                ctx.fillText('Note:', 60, 352);
+                ctx.fillStyle = '#e0e7ff';
+                ctx.font = "400 16px 'Inter', sans-serif";
+                const noteDisplay = currentNote ? currentNote.substring(0, 45) : '(no description)';
+                ctx.fillText(noteDisplay, 60, 380);
+
+                // Quick controls to edit annotation details
+                this.renderActionButton(ctx, 60, 412, 140, 56, 'Color<<', 'ann.colorPrev', 'rgba(249,115,22,0.3)');
+                this.renderActionButton(ctx, 210, 412, 140, 56, 'Color>>', 'ann.colorNext', 'rgba(249,115,22,0.3)');
+                this.renderActionButton(ctx, 360, 412, 140, 56, 'Label', 'ann.labelReset', 'rgba(59,130,246,0.3)');
+                this.renderActionButton(ctx, 510, 412, 140, 56, 'Note', 'ann.noteReset', 'rgba(96,165,250,0.3)');
+
+                ctx.fillStyle = '#93c5fd';
+                ctx.font = "600 22px 'Inter', sans-serif";
+                ctx.textAlign = 'left';
+                ctx.fillText(`Active Tool: ${activeTool}`, 60, 500);
+                ctx.fillText(`Pending Points: ${pending}`, 60, 532);
+                ctx.fillText(`Saved: ${saved}`, 60, 564);
+
+                // --- TOOL BUTTONS ---
+                this.renderActionButton(ctx, 60, 614, 180, 78, 'Pin', 'ann.tool.pin', 'rgba(14,165,233,0.28)');
+                this.renderActionButton(ctx, 250, 614, 180, 78, 'Label', 'ann.tool.label', 'rgba(14,165,233,0.28)');
+                this.renderActionButton(ctx, 440, 614, 180, 78, 'Note', 'ann.tool.note', 'rgba(14,165,233,0.28)');
+                this.renderActionButton(ctx, 630, 614, 160, 78, 'Line', 'ann.tool.line', 'rgba(139,92,246,0.28)');
+                this.renderActionButton(ctx, 800, 614, 160, 78, 'Polygon', 'ann.tool.polygon', 'rgba(139,92,246,0.28)');
+
+                this.renderActionButton(ctx, 60, 716, 180, 78, 'Sphere', 'ann.tool.sphere');
+                this.renderActionButton(ctx, 250, 716, 180, 78, 'Hazard', 'ann.tool.hazard');
+                this.renderActionButton(ctx, 440, 716, 180, 78, 'Flag', 'ann.tool.flag');
+                this.renderActionButton(ctx, 630, 716, 160, 78, 'Arrow', 'ann.tool.arrow');
+                this.renderActionButton(ctx, 800, 716, 160, 78, 'Stamp', 'ann.stamp');
+
+                this.renderActionButton(ctx, 60, 818, 290, 78, 'Finish Multi-Point', 'ann.finish', 'rgba(34,197,94,0.28)');
+                this.renderActionButton(ctx, 370, 818, 290, 78, 'Cancel Tool', 'ann.cancel', 'rgba(239,68,68,0.28)');
+                this.renderActionButton(ctx, 680, 818, 290, 78, 'Reload List', 'ann.reload', 'rgba(59,130,246,0.28)');
+
+                this.renderActionButton(ctx, 60, 920, 290, 78, 'Export JSON', 'ann.exportJSON');
+                this.renderActionButton(ctx, 370, 920, 290, 78, 'Export KML', 'ann.exportKML');
+                this.renderActionButton(ctx, 680, 920, 290, 78, 'Clear All', 'ann.clearAll');
+            }
+
+            confirmKeyboardInput() {
+                try {
+                    if (this.keyboardMode === 'label') {
+                        const labelInput = document.getElementById('ann-label-input');
+                        if (labelInput) {
+                            labelInput.value = this.keyboardInput || 'Annotation';
+                            labelInput.dispatchEvent(new Event('input'));
+                        }
+                    } else if (this.keyboardMode === 'note') {
+                        const noteInput = document.getElementById('ann-note-input');
+                        if (noteInput) {
+                            noteInput.value = this.keyboardInput;
+                            noteInput.dispatchEvent(new Event('input'));
+                        }
+                    }
+                } catch (e) {
+                    console.log('[VR Keyboard] DOM update error:', e.message);
+                }
+                this.keyboardMode = null;
+                this.mode = 'annotations';
+            }
+
+            renderKeyboardInput(ctx) {
+                this.renderHeaderActionButtons(ctx);
+
+                ctx.fillStyle = '#e2e8f0';
+                ctx.font = "700 44px 'Inter', sans-serif";
+                ctx.textAlign = 'center';
+                ctx.fillText('VR Keyboard', 512, 170);
+
+                ctx.fillStyle = '#93c5fd';
+                ctx.font = "600 22px 'Inter', sans-serif";
+                ctx.textAlign = 'center';
+                ctx.fillText(`Enter ${this.keyboardMode.toUpperCase()}:`, 512, 220);
+
+                // Display input box with current text
+                ctx.fillStyle = 'rgba(0,0,0,0.5)';
+                this.roundRect(ctx, 60, 250, 904, 60, 8, true);
+                ctx.strokeStyle = '#3b82f6';
+                ctx.lineWidth = 2;
+                this.roundRect(ctx, 60, 250, 904, 60, 8, false, true);
+
+                ctx.fillStyle = '#e0e7ff';
+                ctx.font = "600 24px 'Inter', sans-serif";
+                ctx.textAlign = 'left';
+                const displayText = this.keyboardInput.substring(0, 50);
+                ctx.fillText(displayText || '(type here)', 80, 290);
+
+                // Draw character counter
+                const maxChars = this.keyboardMode === 'label' ? 40 : 100;
+                ctx.fillStyle = '#cbd5e1';
+                ctx.font = "400 16px 'Inter', sans-serif";
+                ctx.textAlign = 'right';
+                ctx.fillText(`${this.keyboardInput.length}/${maxChars}`, 944, 290);
+
+                // Render keyboard rows
+                let keyY = 340;
+                const keyWidth = 80;
+                const keyHeight = 56;
+                const keySpacing = 8;
+
+                ctx.fillStyle = '#93c5fd';
+                ctx.font = "600 16px 'Inter', sans-serif";
+
+                for (let r = 0; r < this.keyboardRows.length; r++) {
+                    const row = this.keyboardRows[r];
+                    const rowWidth = row.length * (keyWidth + keySpacing);
+                    const startX = (1024 - rowWidth) / 2;
+
+                    for (let c = 0; c < row.length; c++) {
+                        const key = row[c];
+                        const x = startX + c * (keyWidth + keySpacing);
+                        const y = keyY;
+
+                        // Special styling for backspace and space
+                        let bgColor = 'rgba(59,130,246,0.3)';
+                        if (key === '←' || key === '–') bgColor = 'rgba(239,68,68,0.3)';
+                        if (key === ' ') bgColor = 'rgba(96,165,250,0.3)';
+
+                        this.renderActionButton(ctx, x, y, keyWidth, keyHeight, key === '←' ? '← Back' : (key === '–' ? '- ' : key), `keyboard.key.${key}`, bgColor);
+                    }
+                    keyY += keyHeight + keySpacing;
+                }
+
+                // Confirm and Cancel buttons
+                this.renderActionButton(ctx, 60, 920, 440, 78, 'Confirm ✓', 'keyboard.key.Confirm', 'rgba(34,197,94,0.4)');
+                this.renderActionButton(ctx, 520, 920, 440, 78, 'Cancel', 'keyboard.key.Cancel', 'rgba(239,68,68,0.4)');
+            }
+
+            renderGenericTabContent(ctx) {
+                this.renderHeaderActionButtons(ctx);
+
+                const tabObj = this.tabs.find(t => t.id === this.nativeTabId);
+                const label = tabObj ? tabObj.label : 'Feature';
+
+                ctx.fillStyle = '#e2e8f0';
+                ctx.font = "700 46px 'Inter', sans-serif";
+                ctx.textAlign = 'center';
+                ctx.fillText(`${label} (VR Native)`, 512, 220);
+
+                ctx.fillStyle = '#cbd5e1';
+                ctx.font = "600 30px 'Inter', sans-serif";
+                ctx.fillText('DOM overlay is unavailable on this device/browser.', 512, 320);
+                ctx.fillText('This tab is open in native VR mode.', 512, 372);
+
+                if (this.nativeTabId === 'view') {
+                    this.renderActionButton(ctx, 140, 470, 220, 86, 'Sky View', 'view.sky', 'rgba(14,165,233,0.28)');
+                    this.renderActionButton(ctx, 402, 470, 220, 86, 'Aerial', 'view.aerial', 'rgba(14,165,233,0.28)');
+                    this.renderActionButton(ctx, 664, 470, 220, 86, 'Street', 'view.street', 'rgba(14,165,233,0.28)');
+                }
+            }
+
+            show() {
+                if (this.active) return;
+                this.active = true;
+                this.panelGroup.visible = true;
+                this.positionInFront();
+                this.render();
+            }
+
+            hide() {
+                this.active = false;
+                this.panelGroup.visible = false;
+            }
+
+            toggle() {
+                if (this.active) this.hide();
+                else this.show();
+            }
+
+            openTab(tabId) {
+                this.statusMessage = '';
+                this.lastOpenedTab = tabId;
+                const isInVR = renderer && renderer.xr && renderer.xr.isPresenting;
+                if (isInVR && !window.vrDomOverlayEnabled) {
+                    if (tabId === 'layers') {
+                        this.mode = 'layers';
+                    } else if (tabId === 'slices') {
+                        this.mode = 'slices';
+                    } else if (tabId === 'mesh') {
+                        this.mode = 'mesh';
+                    } else if (tabId === 'geo') {
+                        this.mode = 'geo';
+                    } else if (tabId === 'survey') {
+                        this.mode = 'survey';
+                    } else if (tabId === 'annotations') {
+                        this.mode = 'annotations';
+                    } else {
+                        this.mode = 'native';
+                        this.nativeTabId = tabId;
+                    }
+                    this.render();
+                    return;
+                }
+                if (typeof window.switchVRTab === 'function') {
+                    window.switchVRTab(tabId);
+                }
+                this.mode = 'menu';
+                this.hide();
+                this.render();
+            }
+
+            handleInteraction(uv) {
+                if (!this.active) return false;
+                const px = uv.x * 1024;
+                const py = (1 - uv.y) * 1024;
+
+                for (const btn of this.buttons) {
+                    if (px >= btn.x && px <= btn.x + btn.w && py >= btn.y && py <= btn.y + btn.h) {
+                        this.handleAction(btn.action);
+                        return true;
+                    }
+                }
+
+                return false;
+            }
+
+            handleAction(action) {
+                if (action === 'close') {
+                    this.hide();
+                    return;
+                }
+                if (action === 'back') {
+                    this.mode = 'menu';
+                    this.render();
+                    return;
+                }
+                if (action.startsWith('open:')) {
+                    this.openTab(action.split(':')[1]);
+                    return;
+                }
+
+                const showPointsCb = document.getElementById('showPoints');
+                const sizeSlider = document.getElementById('sizeSlider');
+                const isoSlider = document.getElementById('isoSlider');
+                const linkAll = document.getElementById('linkAllGrids');
+                const depth3DToggle = document.getElementById('depthSliceToggle');
+                const depth2DToggle = document.getElementById('depth2DSliceToggle');
+                const depthSlider = document.getElementById('depthSliceSlider');
+                const meshMode = document.getElementById('meshDataSelector');
+                const showMesh = document.getElementById('showMesh');
+                const showPly = document.getElementById('showPlySurface');
+                const showPotree = document.getElementById('showPotree');
+                const meshOpacity = document.getElementById('meshOpacitySlider');
+                const meshPosY = document.getElementById('meshPosYSlider');
+                const showKml = document.getElementById('showKML');
+                const mapType = document.getElementById('mapType');
+                const mapZoom = document.getElementById('mapZoom');
+                const groundOpacity = document.getElementById('groundOpacitySlider');
+                const surveySpacing = document.getElementById('surveyGridSpacingSlider');
+                const showSurveyGen = document.getElementById('showSurveyGeneratedGrid');
+                const ann = window.annMgr;
+
+                const stepSlider = (slider, delta) => {
+                    if (!slider) return;
+                    const cur = parseFloat(slider.value || '0');
+                    const min = parseFloat(slider.min || '-99999');
+                    const max = parseFloat(slider.max || '99999');
+                    const val = Math.min(max, Math.max(min, cur + delta));
+                    slider.value = String(val);
+                    slider.dispatchEvent(new Event('input'));
+                    slider.dispatchEvent(new Event('change'));
+                };
+
+                if (action === 'layers.toggleModel' && showPointsCb) {
+                    showPointsCb.checked = !showPointsCb.checked;
+                    showPointsCb.dispatchEvent(new Event('change'));
+                } else if (action === 'layers.all' && window.toggleAllLayers) {
+                    window.toggleAllLayers(true);
+                } else if (action === 'layers.none' && window.toggleAllLayers) {
+                    window.toggleAllLayers(false);
+                } else if (action === 'layers.cycle' && window.cycleVRLayers) {
+                    window.cycleVRLayers();
+                } else if (action === 'layers.sizeDown' && sizeSlider) {
+                    const v = Math.max(parseFloat(sizeSlider.min || '0.01'), parseFloat(sizeSlider.value || '0.1') - 0.01);
+                    sizeSlider.value = String(v);
+                    sizeSlider.dispatchEvent(new Event('input'));
+                } else if (action === 'layers.sizeUp' && sizeSlider) {
+                    const v = Math.min(parseFloat(sizeSlider.max || '1.5'), parseFloat(sizeSlider.value || '0.1') + 0.01);
+                    sizeSlider.value = String(v);
+                    sizeSlider.dispatchEvent(new Event('input'));
+                } else if (action === 'layers.paletteRandom' && window.setRandomPalette) {
+                    window.setRandomPalette();
+                } else if ((action === 'layers.shapeNext' || action === 'layers.shapePrev') && window.updatePointShape) {
+                    const current = window.currentPointShape || 'square';
+                    let idx = this.pointShapes.indexOf(current);
+                    if (idx < 0) idx = 0;
+                    idx = action === 'layers.shapeNext'
+                        ? (idx + 1) % this.pointShapes.length
+                        : (idx - 1 + this.pointShapes.length) % this.pointShapes.length;
+                    window.updatePointShape(this.pointShapes[idx]);
+                } else if (action === 'layers.toggleSync' && linkAll) {
+                    linkAll.checked = !linkAll.checked;
+                    linkAll.dispatchEvent(new Event('change'));
+                } else if (action === 'layers.isoDown' && isoSlider) {
+                    const v = Math.max(parseFloat(isoSlider.min || '0'), parseFloat(isoSlider.value || '0') - 5);
+                    isoSlider.value = String(v);
+                    isoSlider.dispatchEvent(new Event('input'));
+                } else if (action === 'layers.isoUp' && isoSlider) {
+                    const v = Math.min(parseFloat(isoSlider.max || '255'), parseFloat(isoSlider.value || '0') + 5);
+                    isoSlider.value = String(v);
+                    isoSlider.dispatchEvent(new Event('input'));
+                } else if (action === 'view.sky' && window.setSkyView) {
+                    window.setSkyView();
+                } else if (action === 'view.aerial' && window.setAerialView) {
+                    window.setAerialView();
+                } else if (action === 'view.street' && window.setStreetView) {
+                    window.setStreetView();
+                } else if (action === 'slices.toggle3d' && depth3DToggle && window.toggleDepthSlice) {
+                    depth3DToggle.checked = !depth3DToggle.checked;
+                    window.toggleDepthSlice(depth3DToggle.checked);
+                } else if (action === 'slices.toggle2d' && depth2DToggle && window.toggle2DSlice) {
+                    depth2DToggle.checked = !depth2DToggle.checked;
+                    window.toggle2DSlice(depth2DToggle.checked);
+                } else if (action === 'slices.toggleSync' && linkAll) {
+                    linkAll.checked = !linkAll.checked;
+                    linkAll.dispatchEvent(new Event('change'));
+                } else if (action === 'slices.depthDown') {
+                    stepSlider(depthSlider, -0.1);
+                } else if (action === 'slices.depthUp') {
+                    stepSlider(depthSlider, 0.1);
+                } else if (action === 'slices.depthMin' && depthSlider && window.updateDepthSlice) {
+                    depthSlider.value = depthSlider.min;
+                    window.updateDepthSlice(depthSlider.value);
+                } else if (action === 'slices.depthMid' && depthSlider && window.updateDepthSlice) {
+                    const mid = (parseFloat(depthSlider.min || '0') + parseFloat(depthSlider.max || '0')) / 2;
+                    depthSlider.value = String(mid);
+                    window.updateDepthSlice(depthSlider.value);
+                } else if (action === 'slices.depthMax' && depthSlider && window.updateDepthSlice) {
+                    depthSlider.value = depthSlider.max;
+                    window.updateDepthSlice(depthSlider.value);
+                } else if (action === 'slices.applyDepth' && depthSlider && window.updateDepthSlice) {
+                    window.updateDepthSlice(depthSlider.value);
+                } else if (action === 'mesh.mode.cloud' && meshMode && window.toggleMeshControlSettings) {
+                    meshMode.value = 'cloud';
+                    window.toggleMeshControlSettings('cloud');
+                } else if (action === 'mesh.mode.ply' && meshMode && window.toggleMeshControlSettings) {
+                    meshMode.value = 'ply';
+                    window.toggleMeshControlSettings('ply');
+                } else if (action === 'mesh.mode.potree' && meshMode && window.toggleMeshControlSettings) {
+                    meshMode.value = 'potree';
+                    window.toggleMeshControlSettings('potree');
+                } else if (action === 'mesh.loadCloud' && window.loadSurveyMesh) {
+                    window.loadSurveyMesh();
+                } else if (action === 'mesh.loadPly' && window.loadPlySurfaceSingle) {
+                    window.loadPlySurfaceSingle();
+                } else if (action === 'mesh.loadPotree' && window.loadPotreeLidar) {
+                    window.loadPotreeLidar();
+                } else if (action === 'mesh.toggleShowMesh' && showMesh) {
+                    showMesh.checked = !showMesh.checked;
+                    showMesh.dispatchEvent(new Event('change'));
+                } else if (action === 'mesh.toggleShowPly' && showPly) {
+                    showPly.checked = !showPly.checked;
+                    if (window.togglePlySurface) window.togglePlySurface(showPly.checked);
+                    else showPly.dispatchEvent(new Event('change'));
+                } else if (action === 'mesh.toggleShowPotree' && showPotree) {
+                    showPotree.checked = !showPotree.checked;
+                    if (window.togglePotreeVisibility) window.togglePotreeVisibility(showPotree.checked);
+                    else showPotree.dispatchEvent(new Event('change'));
+                } else if (action === 'mesh.opacityDown') {
+                    stepSlider(meshOpacity, -0.1);
+                } else if (action === 'mesh.opacityUp') {
+                    stepSlider(meshOpacity, 0.1);
+                } else if (action === 'mesh.posYDown') {
+                    stepSlider(meshPosY, -0.5);
+                } else if (action === 'mesh.posYUp') {
+                    stepSlider(meshPosY, 0.5);
+                } else if (action === 'mesh.autoFit' && window.autoFitMeshToMap) {
+                    window.autoFitMeshToMap();
+                } else if (action === 'geo.toggleKml' && showKml && window.toggleKML) {
+                    showKml.checked = !showKml.checked;
+                    window.toggleKML(showKml.checked);
+                } else if (action === 'geo.startAlign' && window.startAlignment) {
+                    window.startAlignment();
+                } else if (action === 'geo.finishAlign' && window.finishAndFit) {
+                    window.finishAndFit();
+                } else if (action === 'geo.clearAlign' && window.clearAlignmentPoints) {
+                    window.clearAlignmentPoints();
+                } else if (action === 'geo.setAnchor' && window.updateGeoRef) {
+                    window.updateGeoRef();
+                } else if (action === 'geo.copyCoords' && window.copyCoords) {
+                    window.copyCoords();
+                } else if (action === 'geo.mapTypeNext' && mapType) {
+                    mapType.selectedIndex = (mapType.selectedIndex + 1) % mapType.options.length;
+                    mapType.dispatchEvent(new Event('change'));
+                } else if (action === 'geo.zoomNext' && mapZoom) {
+                    mapZoom.selectedIndex = (mapZoom.selectedIndex + 1) % mapZoom.options.length;
+                    mapZoom.dispatchEvent(new Event('change'));
+                } else if (action === 'geo.openCesium' && window.openCesium) {
+                    window.openCesium();
+                } else if (action === 'geo.groundOpacityDown') {
+                    stepSlider(groundOpacity, -0.1);
+                } else if (action === 'geo.groundOpacityUp') {
+                    stepSlider(groundOpacity, 0.1);
+                } else if (action === 'geo.multiGrid' && window.showMultiGridModal) {
+                    window.showMultiGridModal();
+                } else if (action === 'survey.drawPoly' && window.startSurveyGridDraw) {
+                    window.startSurveyGridDraw();
+                } else if (action === 'survey.generateGrid' && window.generateSurveyGrid) {
+                    window.generateSurveyGrid();
+                } else if (action === 'survey.clearGrid' && window.clearSurveyGrid) {
+                    window.clearSurveyGrid();
+                } else if (action === 'survey.spacingDown') {
+                    stepSlider(surveySpacing, -0.1);
+                } else if (action === 'survey.spacingUp') {
+                    stepSlider(surveySpacing, 0.1);
+                } else if (action === 'survey.toggleGenerated' && showSurveyGen && window.toggleSurveyGeneratedGrid) {
+                    showSurveyGen.checked = !showSurveyGen.checked;
+                    window.toggleSurveyGeneratedGrid(showSurveyGen.checked);
+                } else if (action === 'survey.refreshWeather' && window.refreshSurveyWeather) {
+                    window.refreshSurveyWeather();
+                } else if (action === 'survey.exportKML' && window.exportSurveyGridKML) {
+                    window.exportSurveyGridKML();
+                } else if (action === 'survey.exportSHP' && window.exportSurveyGridSHP) {
+                    window.exportSurveyGridSHP();
+                } else if (action === 'survey.report' && window.exportSurveyReport) {
+                    window.exportSurveyReport();
+                } else if (action === 'survey.print' && window.printSurveyPlan) {
+                    window.printSurveyPlan();
+                } else if (action === 'survey.applySpacing' && surveySpacing) {
+                    surveySpacing.dispatchEvent(new Event('input'));
+                } else if (action.startsWith('ann.tool.') && ann && ann.setTool) {
+                    ann.setTool(action.replace('ann.tool.', ''));
+                    if (window.vrTutorial && window.vrTutorial.active) {
+                        window.vrTutorial.stop();
+                    }
+                    // Close panel after tool selection so trigger clicks go to scene placement.
+                    this.hide();
+                } else if (action === 'ann.finish' && ann && ann.finishMultiPoint) {
+                    ann.finishMultiPoint();
+                } else if (action === 'ann.cancel' && ann && ann.cancelTool) {
+                    ann.cancelTool();
+                } else if (action === 'ann.reload' && ann && ann.loadAnnotations) {
+                    ann.loadAnnotations();
+                } else if (action === 'ann.stamp' && ann && ann.stampMeasurement) {
+                    ann.stampMeasurement();
+                    this.hide();
+                } else if (action === 'ann.exportJSON' && ann && ann.exportJSON) {
+                    ann.exportJSON();
+                } else if (action === 'ann.exportKML' && ann && ann.exportKML) {
+                    ann.exportKML();
+                } else if (action === 'ann.clearAll' && ann && ann.clearAll) {
+                    ann.clearAll();
+                } else if (action === 'ann.colorNext' || action === 'ann.colorPrev') {
+                    // Cycle through preset colors for annotations
+                    const colorPicker = document.getElementById('ann-color-picker');
+                    const colors = ['#f59e0b', '#ef4444', '#3b82f6', '#10b981', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316'];
+                    if (colorPicker) {
+                        const currentColor = colorPicker.value;
+                        let idx = colors.indexOf(currentColor);
+                        if (idx < 0) idx = 0;
+                        idx = action === 'ann.colorNext' 
+                            ? (idx + 1) % colors.length 
+                            : (idx - 1 + colors.length) % colors.length;
+                        colorPicker.value = colors[idx];
+                        colorPicker.dispatchEvent(new Event('input'));
+                    }
+                } else if (action === 'ann.labelReset') {
+                    // Open keyboard for label input
+                    this.keyboardMode = 'label';
+                    this.keyboardInput = '';
+                    this.mode = 'ann_keyboard';
+                    this.render();
+                } else if (action === 'ann.noteReset') {
+                    // Open keyboard for note input
+                    this.keyboardMode = 'note';
+                    this.keyboardInput = '';
+                    this.mode = 'ann_keyboard';
+                    this.render();
+                } else if (action.startsWith('keyboard.key.')) {
+                    // Handle individual key presses
+                    const key = action.replace('keyboard.key.', '');
+                    if (key === 'Backspace' || key === '←') {
+                        this.keyboardInput = this.keyboardInput.slice(0, -1);
+                    } else if (key === 'Confirm') {
+                        this.confirmKeyboardInput();
+                    } else if (key === 'Cancel') {
+                        this.keyboardMode = null;
+                        this.mode = 'annotations';
+                    } else {
+                        const maxLength = this.keyboardMode === 'label' ? 40 : 100;
+                        if (this.keyboardInput.length < maxLength) {
+                            this.keyboardInput += key;
+                        }
+                    }
+                    this.render();
+                }
+
+                if (this.active) this.render();
+            }
+
+            positionInFront() {
+                const vrCam = renderer.xr.getCamera();
+                const headPos = new THREE.Vector3();
+                const headDir = new THREE.Vector3();
+                vrCam.getWorldPosition(headPos);
+                vrCam.getWorldDirection(headDir);
+                headDir.y = 0;
+                if (headDir.lengthSq() < 0.01) headDir.set(0, 0, -1);
+                headDir.normalize();
+
+                const targetPos = headPos.clone().addScaledVector(headDir, 1.6);
+                targetPos.y = Math.max(headPos.y - 0.06, 1.15);
+                this.panelGroup.position.copy(targetPos);
+                this.panelGroup.lookAt(headPos);
+            }
+
+            update(cameraObj) {
+                if (!this.active) return;
+                const headPos = new THREE.Vector3();
+                const headDir = new THREE.Vector3();
+                cameraObj.getWorldPosition(headPos);
+                cameraObj.getWorldDirection(headDir);
+                headDir.y = 0;
+                if (headDir.lengthSq() < 0.01) headDir.set(0, 0, -1);
+                headDir.normalize();
+
+                const targetPos = headPos.clone().addScaledVector(headDir, 1.6);
+                targetPos.y = Math.max(headPos.y - 0.06, 1.15);
+                if (this.panelGroup.position.distanceTo(targetPos) > 3) {
+                    this.panelGroup.position.copy(targetPos);
+                } else {
+                    this.panelGroup.position.lerp(targetPos, 0.12);
+                }
+                this.panelGroup.lookAt(headPos);
+            }
+
+            roundRect(ctx, x, y, width, height, radius, fill, stroke) {
+                if (typeof radius === 'number') radius = { tl: radius, tr: radius, bl: radius, br: radius };
+                ctx.beginPath();
+                ctx.moveTo(x + radius.tl, y);
+                ctx.lineTo(x + width - radius.tr, y);
+                ctx.quadraticCurveTo(x + width, y, x + width, y + radius.tr);
+                ctx.lineTo(x + width, y + height - radius.br);
+                ctx.quadraticCurveTo(x + width, y + height, x + width - radius.br, y + height);
+                ctx.lineTo(x + radius.bl, y + height);
+                ctx.quadraticCurveTo(x, y + height, x, y + height - radius.bl);
+                ctx.lineTo(x, y + radius.tl);
+                ctx.quadraticCurveTo(x, y, x + radius.tl, y);
+                ctx.closePath();
+                if (fill) ctx.fill();
+                if (stroke) ctx.stroke();
+            }
+        }
+
+        const vrFeaturePanel = new VRFeaturePanelManager();
+        window.vrFeaturePanel = vrFeaturePanel;
+        window.vrDomOverlayEnabled = false;
+
         // Interaction for VR Buttons: Left and Right triggers can click the panel
         [controller0, controller1].forEach(c => {
             c.addEventListener('selectstart', () => {
-                if (!vrTutorial.active) return;
                 const raycaster = new THREE.Raycaster();
                 const tempMatrix = new THREE.Matrix4();
                 tempMatrix.identity().extractRotation(c.matrixWorld);
                 raycaster.ray.origin.setFromMatrixPosition(c.matrixWorld);
                 raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
-                
-                const intersects = raycaster.intersectObject(vrTutorial.panelMesh);
-                if (intersects.length > 0) {
-                    vrTutorial.handleInteraction(intersects[0].uv);
+
+                // If annotation tool is active, placement should win over tutorial panel clicks.
+                if (window.annMgr && window.annMgr.activeTool && renderer.xr.isPresenting) {
+                    const placed = window.annMgr.placeFromController(c);
+                    if (placed) return;
+                }
+
+                if (vrFeaturePanel.active) {
+                    const featureHits = raycaster.intersectObject(vrFeaturePanel.panelMesh);
+                    if (featureHits.length > 0) {
+                        if (vrFeaturePanel.handleInteraction(featureHits[0].uv)) return;
+                    }
+                }
+
+                if (vrTutorial.active) {
+                    const tutorialHits = raycaster.intersectObject(vrTutorial.panelMesh);
+                    if (tutorialHits.length > 0) {
+                        vrTutorial.handleInteraction(tutorialHits[0].uv);
+                        return;
+                    }
+                }
+
+                // Secondary placement attempt if panel/tutor did not consume trigger.
+                if (window.annMgr && window.annMgr.activeTool && renderer.xr.isPresenting) {
+                    window.annMgr.placeFromController(c);
                 }
             });
         });
@@ -9986,6 +11049,11 @@
                         }
                     }
 
+                    // Thumbstick click (3): Toggle in-VR Feature Panel
+                    if (gamepad.buttons[3] && gamepad.buttons[3].pressed && !states[3]) {
+                        vrFeaturePanel.toggle();
+                    }
+
                     // Thumbstick View Movement
                     const axes = gamepad.axes;
                     let xVal = 0, yVal = 0;
@@ -10063,6 +11131,11 @@
                         countdownMesh.visible = false;
                     }
 
+                    // Thumbstick click (3): Toggle in-VR Feature Panel
+                    if (gamepad.buttons[3] && gamepad.buttons[3].pressed && !states[3]) {
+                        vrFeaturePanel.toggle();
+                    }
+
                     // Thumbstick Up/Down Movement (Vertical)
                     const leftAxes = gamepad.axes;
                     let leftYVal = 0;
@@ -10077,15 +11150,14 @@
                         // Move cameraRig up/down (vertical movement)
                         // Inverted: Push up (-y) moves UP (+y in scene)
                         // Vertical speed scales with height for better control at distance
-                        const vHeightMultiplier = Math.max(1, cameraRig.position.y / 10);
+                        const vHeightMultiplier = Math.max(1, Math.abs(cameraRig.position.y) / 10);
                         const verticalSpeed = 0.25 * vHeightMultiplier; 
                         
                         cameraRig.position.y -= leftYVal * verticalSpeed;
                         
-                        // Height clamping: can't go below ground, increased max cap
-                        const minHeight = 0.5;
+                        // Height clamping: no lower limit, can go underground; upper cap only
                         const maxHeight = 150; 
-                        cameraRig.position.y = Math.max(minHeight, Math.min(maxHeight, cameraRig.position.y));
+                        cameraRig.position.y = Math.min(maxHeight, cameraRig.position.y);
                     }
                 }
 
@@ -10172,10 +11244,21 @@
                                 warmup.volume = 0;
                                 window.speechSynthesis.speak(warmup);
                             }
-                            const session = await navigator.xr.requestSession('immersive-vr', {
-                                optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking', 'layers']
-                            });
+                            let session;
+                            try {
+                                session = await navigator.xr.requestSession('immersive-vr', {
+                                    requiredFeatures: ['dom-overlay'],
+                                    optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking', 'layers'],
+                                    domOverlay: { root: document.body }
+                                });
+                            } catch (domOverlayErr) {
+                                console.warn('DOM overlay request failed, using standard immersive VR session:', domOverlayErr);
+                                session = await navigator.xr.requestSession('immersive-vr', {
+                                    optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking', 'layers']
+                                });
+                            }
                             renderer.xr.setSession(session);
+                            window.vrDomOverlayEnabled = !!session.domOverlayState;
                             camera.add(vrHudSprite);
                             camera.add(logoHudSprite);
                             updateVRButton('active');
@@ -10183,6 +11266,7 @@
 
                             session.addEventListener('end', () => {
                                 updateVRButton('supported');
+                                window.vrDomOverlayEnabled = false;
                                 camera.remove(vrHudSprite);
                                 camera.remove(logoHudSprite);
                             });
@@ -10358,6 +11442,9 @@
                 // Update tutorial panel position relative to head
                 if (vrTutorial && vrTutorial.active) {
                     vrTutorial.update(camera);
+                }
+                if (vrFeaturePanel && vrFeaturePanel.active) {
+                    vrFeaturePanel.update(camera);
                 }
             } else {
                 azimuth = controls.getAzimuthalAngle();
@@ -10751,63 +11838,7 @@
                 };
             }
 
-            // ---- Scene Click ---- (fixed: targets GPR point cloud, not ground plane)
-            _handleSceneClick(event) {
-                const rect = renderer.domElement.getBoundingClientRect();
-                const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-                const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-
-                raycaster.setFromCamera({ x, y }, camera);
-
-                // Set threshold high enough for point cloud picking
-                raycaster.params.Points = { threshold: 0.18 };
-
-                let pos = null;
-
-                // --- PASS 1: Try the GPR point cloud first (gridsGroup contains all grids) ---
-                // This is the most accurate — it hits the actual data, not the ground plane.
-                const gprTargets = [];
-                if (typeof gridsGroup !== 'undefined') {
-                    raycaster.intersectObject(gridsGroup, true, gprTargets);
-                }
-                // Filter out our own annotation objects
-                const gprHits = gprTargets.filter(i =>
-                    !this.group.getObjectById(i.object.id) && i.object !== this.group
-                );
-                if (gprHits.length > 0) {
-                    pos = gprHits[0].point.clone();
-                }
-
-                // --- PASS 2: Fallback to full scene EXCLUDING ground plane ---
-                if (!pos) {
-                    const allHits = raycaster.intersectObjects(scene.children, true)
-                        .filter(i => {
-                            if (this.group.getObjectById(i.object.id)) return false; // skip own
-                            if (i.object === this.group) return false;
-                            // Skip ground / map planes (PlaneGeometry at Y≈0)
-                            if (i.object.isMesh &&
-                                i.object.geometry &&
-                                i.object.geometry.type === 'PlaneGeometry' &&
-                                Math.abs(i.point.y) < 0.05) return false;
-                            return true;
-                        });
-                    if (allHits.length > 0) {
-                        pos = allHits[0].point.clone();
-                    }
-                }
-
-                // --- PASS 3: Last resort — horizontal plane at the GPR height ---
-                if (!pos) {
-                    const gprY = (typeof gridsGroup !== 'undefined') ? gridsGroup.position.y : 0.3;
-                    const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -gprY);
-                    const hit = new THREE.Vector3();
-                    if (raycaster.ray.intersectPlane(plane, hit)) {
-                        pos = hit;
-                    } else {
-                        return; // Ray is parallel to plane, can't place
-                    }
-                }
-
+            _placeAtPoint(pos) {
                 const multiTypes = ['line', 'polygon'];
                 if (multiTypes.includes(this.activeTool)) {
                     this.pendingPoints.push(pos);
@@ -10820,6 +11851,178 @@
 
                 // Single-click types: place immediately
                 this._placeSinglePoint(this.activeTool, pos);
+            }
+
+            _pickPointFromRaycaster(activeRaycaster) {
+                // Reset all raycaster params to ensure clean state
+                activeRaycaster.params = { 
+                    Line: { threshold: 0.1 },
+                    LineSegments: { threshold: 0.1 },
+                    LOD: { threshold: 0 },
+                    Mesh: { threshold: 0 },
+                    Points: { threshold: 0.05 },  // Reduced from 0.18 for better accuracy
+                    Sprite: { threshold: 7 }
+                };
+
+                let pos = null;
+                let bestDistance = Infinity;
+
+                // PASS 1: Try GPR point cloud first
+                const gprTargets = [];
+                if (typeof gridsGroup !== 'undefined' && gridsGroup) {
+                    try {
+                        activeRaycaster.intersectObject(gridsGroup, true, gprTargets);
+                        console.log('[VR Ray] GPR pass hits:', gprTargets.length);
+                        
+                        // Find closest hit within reasonable distance
+                        for (const hit of gprTargets) {
+                            const dist = hit.distance;
+                            if (!this.group.getObjectById(hit.object.id) && hit.object !== this.group && dist < 100) {
+                                if (dist < bestDistance) {
+                                    pos = hit.point.clone();
+                                    bestDistance = dist;
+                                }
+                            }
+                        }
+                        if (pos) {
+                            console.log('[VR Ray] Hit GPR at:', pos, 'distance:', bestDistance);
+                            return pos;
+                        }
+                    } catch (e) {
+                        console.warn('[VR Ray] GPR pass error:', e.message);
+                    }
+                }
+
+                // PASS 2: full scene excluding annotations and flat ground plane
+                if (!pos) {
+                    try {
+                        const allObjs = scene.children ? scene.children : [];
+                        console.log('[VR Ray] Scene has', allObjs.length, 'children');
+                        const allHits = activeRaycaster.intersectObjects(allObjs, true)
+                            .filter(i => {
+                                // Exclude annotation objects
+                                if (this.group.getObjectById(i.object.id)) return false;
+                                if (i.object === this.group) return false;
+                                // Exclude ground plane (thin plane near Y=0)
+                                if (i.object.isMesh &&
+                                    i.object.geometry &&
+                                    i.object.geometry.type === 'PlaneGeometry' &&
+                                    Math.abs(i.point.y) < 0.05) return false;
+                                // Exclude VR UI meshes and controller geometry
+                                if (i.object.name && (i.object.name.includes('vrPanel') || 
+                                                      i.object.name.includes('tutorial') ||
+                                                      i.object.name.includes('ray') ||
+                                                      i.object.name.includes('grip') ||
+                                                      i.object.name.includes('controller'))) return false;
+                                // Only accept hits within reasonable distance
+                                return i.distance < 100;
+                            });
+                        console.log('[VR Ray] Scene pass hits:', allHits.length);
+                        if (allHits.length > 0) {
+                            pos = allHits[0].point.clone();
+                            console.log('[VR Ray] Hit scene at:', pos, 'distance:', allHits[0].distance);
+                            return pos;
+                        }
+                    } catch (e) {
+                        console.warn('[VR Ray] Scene pass error:', e.message);
+                    }
+                }
+
+                // PASS 3: fallback to horizontal plane near GPR height
+                if (!pos) {
+                    const gprY = (typeof gridsGroup !== 'undefined' && gridsGroup) ? gridsGroup.position.y : 0.3;
+                    const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -gprY);
+                    const hit = new THREE.Vector3();
+                    if (activeRaycaster.ray.intersectPlane(plane, hit)) {
+                        // Check distance is reasonable
+                        const distToHit = activeRaycaster.ray.origin.distanceTo(hit);
+                        if (distToHit < 100) {
+                            pos = hit;
+                            console.log('[VR Ray] Hit fallback plane at:', pos, 'distance:', distToHit);
+                        } else {
+                            console.warn('[VR Ray] Fallback plane hit too distant:', distToHit);
+                        }
+                    } else {
+                        console.warn('[VR Ray] Ray missed all targets, no fallback plane hit');
+                    }
+                } else {
+                    console.log('[VR Ray] Already found hit in pass 1 or 2');
+                }
+
+                return pos;
+            }
+
+            placeFromController(controller) {
+                if (!this.activeTool || window.isRulerActive) return false;
+                
+                const pickRaycaster = new THREE.Raycaster();
+                const tempMatrix = new THREE.Matrix4();
+                tempMatrix.identity().extractRotation(controller.matrixWorld);
+                
+                // Get ray origin from controller world position
+                const rayOrigin = new THREE.Vector3();
+                rayOrigin.setFromMatrixPosition(controller.matrixWorld);
+                
+                // Get ray direction (point forward along controller -Z in world space)
+                const rayDir = new THREE.Vector3(0, 0, -1).applyMatrix4(tempMatrix).normalize();
+                
+                // Set up raycaster with verified ray
+                pickRaycaster.ray.origin.copy(rayOrigin);
+                pickRaycaster.ray.direction.copy(rayDir);
+                
+                console.log('[VR Annotation] Ray origin:', rayOrigin, 'Direction:', rayDir);
+
+                const pos = this._pickPointFromRaycaster(pickRaycaster);
+                if (!pos) {
+                    console.warn('[VR Annotation] Ray did not hit any geometry');
+                    return false;
+                }
+
+                // Verify hit is reasonably close to controller
+                const hitDist = rayOrigin.distanceTo(pos);
+                if (hitDist > 100) {
+                    console.warn('[VR Annotation] Hit too far away:', hitDist, '- possible accuracy issue, rejecting');
+                    return false;
+                }
+
+                console.log('[VR Annotation] Placed at:', pos, 'Distance from controller:', hitDist, 'Tool:', this.activeTool);
+                this._showHitMarker(pos);
+                this._placeAtPoint(pos);
+                return true;
+            }
+
+            _showHitMarker(pos) {
+                // Remove old marker
+                const oldMarker = this.group.getObjectByName('_ann_hit_marker');
+                if (oldMarker) this.group.remove(oldMarker);
+
+                // Create temporary reticle sphere at hit position
+                const marker = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.1, 8, 8),
+                    new THREE.MeshBasicMaterial({ color: 0x00ff00, wireframe: false })
+                );
+                marker.position.copy(pos);
+                marker.name = '_ann_hit_marker';
+                this.group.add(marker);
+
+                // Auto-remove after 300ms
+                setTimeout(() => {
+                    if (this.group.getObjectByName('_ann_hit_marker')) {
+                        this.group.remove(marker);
+                    }
+                }, 300);
+            }
+
+            // ---- Scene Click ---- (fixed: targets GPR point cloud, not ground plane)
+            _handleSceneClick(event) {
+                const rect = renderer.domElement.getBoundingClientRect();
+                const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+                const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+                raycaster.setFromCamera({ x, y }, camera);
+                const pos = this._pickPointFromRaycaster(raycaster);
+                if (!pos) return;
+                this._placeAtPoint(pos);
             }
 
             _drawPendingPreview() {
@@ -10863,9 +12066,24 @@
 
             // ---- Single-Point Placement ----
             _placeSinglePoint(type, pos) {
-                const color = document.getElementById('ann-color-picker').value || '#f59e0b';
-                const label = document.getElementById('ann-label-input').value || type;
-                const note = document.getElementById('ann-note-input').value || '';
+                // In VR immersive mode, use safe defaults; in desktop, read from DOM
+                let color = '#f59e0b';
+                let label = type;
+                let note = '';
+
+                // Try to read from DOM in desktop mode, but don't crash in VR
+                try {
+                    const colorEl = document.getElementById('ann-color-picker');
+                    if (colorEl && colorEl.value) color = colorEl.value;
+
+                    const labelEl = document.getElementById('ann-label-input');
+                    if (labelEl && labelEl.value) label = labelEl.value;
+
+                    const noteEl = document.getElementById('ann-note-input');
+                    if (noteEl && noteEl.value) note = noteEl.value;
+                } catch (e) {
+                    console.log('[VR Annotation] Using default values (DOM not accessible in VR)');
+                }
 
                 let obj3D;
                 switch (type) {
@@ -11148,7 +12366,6 @@
             }
 
             clearAll() {
-                if (!confirm('Clear ALL annotations from this job? This cannot be undone.')) return;
                 this.savedList.forEach(a => {
                     if (a.object3D) this.group.remove(a.object3D);
                     fetch(`/api/annotations/${this._jobId}/${a.id}`, { method: 'DELETE' }).catch(() => { });
