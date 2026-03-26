@@ -12982,6 +12982,7 @@
         let isDrawingSurvey = false;
         let surveyGeneratedLengthMeters = 0;
 
+        // Survey Scan Animation State
         const surveyCurrencyMeta = {
             INR: { symbol: '₹', code: 'INR' },
             USD: { symbol: '$', code: 'USD' },
@@ -13024,6 +13025,41 @@
             window.addEventListener('keydown', onSurveyDrawKey);
         };
 
+        function isSurveyPickVisible(object) {
+            let current = object;
+            while (current) {
+                if (current.visible === false) return false;
+                current = current.parent;
+            }
+            return true;
+        }
+
+        function isSurveyIgnoredPickObject(object) {
+            let current = object;
+            while (current) {
+                if (current === surveyPolygonMesh ||
+                    current === surveyGridGroup ||
+                    (typeof rulerGraphics !== 'undefined' && current === rulerGraphics) ||
+                    (typeof vrFeaturePanel !== 'undefined' && current === vrFeaturePanel.panelGroup) ||
+                    (typeof vrTutorial !== 'undefined' && current === vrTutorial.panelGroup) ||
+                    (window.annMgr && current === window.annMgr.group)) {
+                    return true;
+                }
+
+                if (current.name && (
+                    current.name.includes('Helper') ||
+                    current.name.includes('Camera') ||
+                    current.name.includes('controller') ||
+                    current.name.includes('ray')
+                )) {
+                    return true;
+                }
+
+                current = current.parent;
+            }
+            return false;
+        }
+
         function onSurveyDrawClick(e) {
             if (!isDrawingSurvey) return;
             if (e.button !== 0) return; // Only left click
@@ -13035,11 +13071,57 @@
             );
 
             raycaster.setFromCamera(mouse, camera);
-            let intersects = raycaster.intersectObject(scene, true);
-            if (intersects.length > 0) {
-                let pt = intersects[0].point;
-                surveyPolygonPoints.push(new THREE.Vector3(pt.x, pt.y, pt.z));
+            raycaster.params.Points = { threshold: 0.05 };
+            
+            let hitPoint = null;
+
+            // Intersect preferred geometry containers first (ground, basemap, and GPR data)
+            const pickTargets = [];
+            if (typeof groundGroup !== 'undefined' && groundGroup) pickTargets.push(groundGroup);
+            if (typeof gridsGroup !== 'undefined' && gridsGroup) pickTargets.push(gridsGroup);
+            if (typeof mainGroup !== 'undefined' && mainGroup) pickTargets.push(mainGroup);
+
+            const intersects = [];
+            if (pickTargets.length > 0) {
+                pickTargets.forEach(target => raycaster.intersectObject(target, true, intersects));
+            } else {
+                intersects.push(...raycaster.intersectObjects(scene.children, true));
+            }
+
+            intersects.sort((a, b) => a.distance - b.distance);
+            for (let i = 0; i < intersects.length; i++) {
+                const hit = intersects[i];
+                const object = hit.object;
+
+                // Only attach to actual render surfaces and visible geometry.
+                if (!object || (!object.isMesh && !object.isPoints)) continue;
+                if (!isSurveyPickVisible(object)) continue;
+                if (isSurveyIgnoredPickObject(object)) continue;
+
+                hitPoint = hit.point.clone();
+                break;
+            }
+
+            // Fallback: hit the ground plane at y=0
+            if (!hitPoint) {
+                const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+                const candidate = new THREE.Vector3();
+                if (raycaster.ray.intersectPlane(groundPlane, candidate)) {
+                    hitPoint = candidate;
+                }
+            }
+
+            if (hitPoint) {
+                // Keep points visually above the picked surface to avoid z-fighting.
+                hitPoint.y += 0.005;
+                surveyPolygonPoints.push(new THREE.Vector3(hitPoint.x, hitPoint.y, hitPoint.z));
                 updateSurveyPolygonRender();
+                
+                // Status update
+                const status = document.getElementById('surveyGridDrawStatus');
+                if (status) {
+                    status.textContent = `Drawing polygon... (${surveyPolygonPoints.length} point${surveyPolygonPoints.length !== 1 ? 's' : ''}) - Press Esc to finish`;
+                }
             }
         }
 
@@ -13067,9 +13149,8 @@
             }
             
             const geo = new THREE.BufferGeometry().setFromPoints(points);
-            const mat = new THREE.LineBasicMaterial({ color: 0x10b981, linewidth: 2 });
+            const mat = new THREE.LineBasicMaterial({ color: 0x10b981, linewidth: 2, transparent: true, opacity: 0.9 });
             surveyPolygonMesh = new THREE.Line(geo, mat);
-            surveyPolygonMesh.position.y += 0.05;
             scene.add(surveyPolygonMesh);
         }
 

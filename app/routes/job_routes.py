@@ -436,12 +436,12 @@ async def _perform_cleanup(job_id: str, access_token: Optional[str] = Cookie(Non
     # 1. Cleanup Supabase
     if supabase and SUPABASE_BUCKET:
         try:
-            res = supabase.storage.from_(SUPABASE_BUCKET).list(job_id)
-            if res:
-                file_paths = [f"{job_id}/{item['name']}" for item in res]
-                supabase.storage.from_(SUPABASE_BUCKET).remove(file_paths)
+            file_paths = _list_supabase_files_recursive(job_id)
+            if file_paths:
+                _remove_supabase_files(file_paths)
         except Exception as e:
             print(f"Error deleting from Supabase: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to delete Supabase files for {job_id}")
 
     # 2. Cleanup Local Uploads
     upload_pattern = os.path.join(UPLOAD_FOLDER, f"{job_id}_*")
@@ -476,6 +476,43 @@ async def _perform_cleanup(job_id: str, access_token: Optional[str] = Cookie(Non
         print(f"Error removing job from DB: {e}")
     
     return {"success": True}
+
+
+def _list_supabase_files_recursive(prefix: str):
+    """Return all file paths under a Supabase storage prefix (recursive)."""
+    files = []
+    visited_dirs = set()
+
+    def walk(path: str):
+        if path in visited_dirs:
+            return
+        visited_dirs.add(path)
+
+        items = supabase.storage.from_(SUPABASE_BUCKET).list(path) or []
+        for item in items:
+            name = item.get('name')
+            if not name:
+                continue
+
+            # Supabase folder entries typically have no id/metadata.
+            is_folder = item.get('id') is None and item.get('metadata') is None
+            full_path = f"{path}/{name}" if path else name
+
+            if is_folder:
+                walk(full_path)
+            else:
+                files.append(full_path)
+
+    walk(prefix)
+    return files
+
+
+def _remove_supabase_files(file_paths):
+    """Delete files from Supabase in safe batches."""
+    batch_size = 100
+    for i in range(0, len(file_paths), batch_size):
+        batch = file_paths[i:i + batch_size]
+        supabase.storage.from_(SUPABASE_BUCKET).remove(batch)
 
 
 # ============ SAVED VIEWS API ============

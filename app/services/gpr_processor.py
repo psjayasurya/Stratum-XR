@@ -265,17 +265,53 @@ def process_gpr_data(job_id, filepath, settings, original_filename):
             update_job_status(job_id, 'error', f'CSV file has only {len(df.columns)} columns')
             return
         
-        # OPTIMIZATION: Convert all numeric columns in a single operation (5-10x faster)
-        col_indices = [settings['col_idx_x'], settings['col_idx_y'], 
+        # Convert numeric columns using selected indices first.
+        # If the result is too sparse (common with mismatched mappings),
+        # fallback to auto-detected numeric columns.
+        col_indices = [settings['col_idx_x'], settings['col_idx_y'],
                        settings['col_idx_z'], settings['col_idx_amplitude']]
         cols_data = df.iloc[:, col_indices].apply(pd.to_numeric, errors='coerce')
-        
+
         data = pd.DataFrame({
             'x': cols_data.iloc[:, 0],
             'y': cols_data.iloc[:, 1],
             'z': cols_data.iloc[:, 2],
             'amp': cols_data.iloc[:, 3]
         }).dropna()
+
+        min_expected_rows = max(1000, int(len(df) * 0.01))
+        if len(data) < min_expected_rows and len(df.columns) >= 4:
+            numeric_scores = []
+            numeric_cache = {}
+            for idx in range(len(df.columns)):
+                col_num = pd.to_numeric(df.iloc[:, idx], errors='coerce')
+                valid_count = int(col_num.notna().sum())
+                numeric_scores.append((idx, valid_count))
+                numeric_cache[idx] = col_num
+
+            numeric_scores.sort(key=lambda x: x[1], reverse=True)
+            best_cols = [idx for idx, score in numeric_scores[:4] if score >= min_expected_rows]
+
+            if len(best_cols) >= 4:
+                best_cols = best_cols[:4]
+                fallback = pd.DataFrame({
+                    'x': numeric_cache[best_cols[0]],
+                    'y': numeric_cache[best_cols[1]],
+                    'z': numeric_cache[best_cols[2]],
+                    'amp': numeric_cache[best_cols[3]]
+                }).dropna()
+
+                if len(fallback) > len(data):
+                    data = fallback
+                    settings['col_idx_x'] = int(best_cols[0])
+                    settings['col_idx_y'] = int(best_cols[1])
+                    settings['col_idx_z'] = int(best_cols[2])
+                    settings['col_idx_amplitude'] = int(best_cols[3])
+                    update_job_status(
+                        job_id,
+                        'processing',
+                        f'Auto-corrected column mapping to {best_cols} for denser point cloud.'
+                    )
         
         if len(data) == 0:
             update_job_status(job_id, 'error', 'No valid numeric data found in specified columns')
@@ -299,8 +335,24 @@ def process_gpr_data(job_id, filepath, settings, original_filename):
             data['z'] *= sf
         
         data['abs_amp'] = data['amp'].abs()
-        threshold = data['abs_amp'].quantile(settings['threshold_percentile'])
-        df_filtered = data[data['abs_amp'] > threshold].copy()
+        threshold_pct = float(settings.get('threshold_percentile', 0.63))
+        threshold_pct = min(max(threshold_pct, 0.01), 0.99)
+        threshold = data['abs_amp'].quantile(threshold_pct)
+        df_filtered = data[data['abs_amp'] >= threshold].copy()
+
+        # If filtering becomes too aggressive, relax automatically to avoid sparse "dotty" output.
+        min_keep_points = max(3000, int(len(data) * 0.03))
+        if len(df_filtered) < min_keep_points and len(data) > min_keep_points:
+            relaxed_pct = min(0.5, threshold_pct)
+            relaxed_threshold = data['abs_amp'].quantile(relaxed_pct)
+            df_relaxed = data[data['abs_amp'] >= relaxed_threshold].copy()
+            if len(df_relaxed) > len(df_filtered):
+                df_filtered = df_relaxed
+                update_job_status(
+                    job_id,
+                    'processing',
+                    f'Relaxed amplitude filter from {threshold_pct:.2f} to {relaxed_pct:.2f} to avoid sparse output.'
+                )
         
         if len(df_filtered) == 0:
             update_job_status(job_id, 'error', 'No points after filtering!')
