@@ -2489,6 +2489,14 @@
                     <input type="range" id="assistantRotSlider" min="-180" max="180" step="1" value="0"
                         style="width: 100%;">
                 </div>
+                <div class="toggle-container" style="margin-top: 8px;">
+                    <input type="checkbox" id="assistantAutoFace" checked>
+                    <label for="assistantAutoFace">Auto Face Viewer</label>
+                </div>
+                <button class="btn-small" onclick="placeAssistantNearViewer()"
+                    style="width: 100%; background: #14b8a6; color: #fff; font-weight: bold; height: 32px; margin-top: 8px;">
+                    🧍 Stand In Front Of Me
+                </button>
                 <div style="display: flex; gap: 8px; margin-top: 10px;">
                     <button class="btn-small" onclick="startContinuousInsights()" id="btnStartInsights"
                         style="flex: 2; background: #60a5fa; color: #fff; font-weight: bold; height: 32px; display: none;">
@@ -2507,6 +2515,24 @@
                     style="width: 100%; background: #fbbf24; color: #000; font-weight: bold; height: 32px; display: none; margin-top: 10px;">
                     🔊 Unlock Audio (Quest)
                 </button>
+
+                <div style="margin-top: 12px; border-top: 1px solid rgba(255,255,255,0.12); padding-top: 10px;">
+                    <div class="control-group-title" style="color: #22d3ee; font-size: 10px;">Q &amp; A ASSISTANT</div>
+                    <div id="assistantChatLog" style="max-height: 130px; overflow-y: auto; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; padding: 8px; background: rgba(0,0,0,0.22); font-size: 10px; line-height: 1.4; color: #e2e8f0;">
+                        <div style="color: #93c5fd;">Assistant: Ask me about depth, area, scan quality, export or controls.</div>
+                    </div>
+                    <div style="display: flex; gap: 6px; margin-top: 8px;">
+                        <input id="assistantQuestionInput" type="text" placeholder="Ask a question..."
+                            style="flex: 1; min-width: 0; border-radius: 6px; border: 1px solid rgba(255,255,255,0.18); background: rgba(255,255,255,0.06); color: #fff; padding: 7px; font-size: 10px;">
+                        <button class="btn-small" onclick="askAssistantQuestion()" style="background: #0ea5e9; color: #fff; font-weight: bold; height: 30px; min-width: 60px;">Ask</button>
+                    </div>
+                    <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 7px;">
+                        <button class="btn-small" onclick="useAssistantQuickQuestion('What is the scan depth range?')" style="background: rgba(14,165,233,0.25);">Depth?</button>
+                        <button class="btn-small" onclick="useAssistantQuickQuestion('How large is this survey area?')" style="background: rgba(14,165,233,0.25);">Area?</button>
+                        <button class="btn-small" onclick="useAssistantQuickQuestion('What does high amplitude mean?')" style="background: rgba(14,165,233,0.25);">Amplitude?</button>
+                        <button class="btn-small" onclick="useAssistantQuickQuestion('How can I export this survey?')" style="background: rgba(14,165,233,0.25);">Export?</button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -2925,6 +2951,41 @@
                 <div style="display: flex; justify-content: space-between; margin-bottom: 6px; margin-top: 6px;">
                     <span style="color: var(--text-muted);">Estimated Scan Time:</span>
                     <span style="color: #fbbf24; font-weight: bold;" id="surveyInsightTime">--</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Survey Cost Estimation -->
+        <div class="control-group">
+            <div class="control-group-title" style="color: #22c55e;">💰 SURVEY COST ESTIMATION</div>
+            <div style="background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 8px; padding: 12px; font-size: 11px;">
+                <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+                    <div style="flex: 1; min-width: 120px;">
+                        <label for="surveyCostRateInput" style="display:block; color: var(--text-muted); margin-bottom: 4px;">Rate Per Meter</label>
+                        <input id="surveyCostRateInput" type="number" min="0" step="0.01" value="5" class="precise-input" style="width: 100%;">
+                    </div>
+                    <div style="width: 110px;">
+                        <label for="surveyCostCurrency" style="display:block; color: var(--text-muted); margin-bottom: 4px;">Currency</label>
+                        <select id="surveyCostCurrency" style="width: 100%;">
+                            <option value="INR" selected>INR (₹)</option>
+                            <option value="USD">USD ($)</option>
+                            <option value="EUR">EUR (€)</option>
+                            <option value="GBP">GBP (£)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                    <span style="color: var(--text-muted);">Generated Path Length:</span>
+                    <span style="color: #86efac; font-weight: bold;" id="surveyCostLength">-- m</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                    <span style="color: var(--text-muted);">Applied Rate:</span>
+                    <span style="color: #86efac; font-weight: bold;" id="surveyCostRateDisplay">₹ 5.00 / m</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.12);">
+                    <span style="color: var(--text-muted);">Estimated Survey Cost:</span>
+                    <span style="color: #22c55e; font-weight: bold;" id="surveyEstimatedCost">--</span>
                 </div>
             </div>
         </div>
@@ -5970,6 +6031,8 @@
         let assistantSpeechBubble = null;
         let assistantSpeechTimeout = null;
         let isContinuousMode = false;
+        let assistantAutoFaceViewer = true;
+        let assistantLatestTTS = null;
 
         // Survey Statistics captured from Backend Injection
         const surveyStats = {
@@ -5996,6 +6059,37 @@
             "Switch to 'Street View' using your right trigger to see the data from a human perspective on the ground."
         ];
         let currentInsightIndex = 0;
+
+        const assistantKnowledgeBase = [
+            {
+                test: /depth|deep|range|below/i,
+                getAnswer: () => `The current scan depth range is from ${surveyStats.depthMin} m to ${surveyStats.depthMax} m.`
+            },
+            {
+                test: /area|size|coverage|survey area|dimension/i,
+                getAnswer: () => `The survey footprint is approximately ${surveyStats.sizeX} m by ${surveyStats.sizeY} m.`
+            },
+            {
+                test: /point|total points|how many/i,
+                getAnswer: () => `This dataset contains about ${surveyStats.totalPoints} high-amplitude points.`
+            },
+            {
+                test: /amplitude|signal|red point|high amplitude/i,
+                getAnswer: () => "Higher amplitude reflections often indicate stronger subsurface targets like metallic utilities, rebar, or compact interfaces."
+            },
+            {
+                test: /export|kml|shp|shapefile|report/i,
+                getAnswer: () => "Use the Survey tab export buttons for KML or Shapefile, and in other tools you can export ruler and annotation outputs too."
+            },
+            {
+                test: /align|geo|reference|lat|lon|map/i,
+                getAnswer: () => "Use the Geo tab to set latitude/longitude, align the model, and update map textures before exporting geospatial outputs."
+            },
+            {
+                test: /vr|controller|quest|navigate/i,
+                getAnswer: () => "In VR, use controllers for movement and interaction. You can also use the tutorial for guided onboarding."
+            }
+        ];
 
         // High Quality Point Cloud Texture Generator
         function createPointTexture(type) {
@@ -6171,6 +6265,108 @@
             }
         }
 
+        function faceAssistantTowardsCamera() {
+            if (!assistantModel || !camera) return;
+            const lookTarget = new THREE.Vector3(camera.position.x, assistantModel.position.y + 1.5, camera.position.z);
+            assistantModel.lookAt(lookTarget);
+        }
+
+        window.placeAssistantNearViewer = function () {
+            if (!assistantModel || !camera || !controls) return;
+            const dir = new THREE.Vector3();
+            camera.getWorldDirection(dir);
+            dir.y = 0;
+            if (dir.lengthSq() < 0.0001) dir.set(0, 0, -1);
+            dir.normalize();
+
+            const targetPos = camera.position.clone().addScaledVector(dir, 3.5);
+            targetPos.y = 0;
+            assistantModel.position.copy(targetPos);
+            faceAssistantTowardsCamera();
+        };
+
+        function appendAssistantChatMessage(who, text) {
+            const log = document.getElementById('assistantChatLog');
+            if (!log) return;
+            const row = document.createElement('div');
+            row.style.marginBottom = '5px';
+            row.style.color = who === 'You' ? '#cbd5e1' : '#93c5fd';
+            row.textContent = `${who}: ${text}`;
+            log.appendChild(row);
+            log.scrollTop = log.scrollHeight;
+        }
+
+        function getAssistantAnswer(question) {
+            const q = (question || '').trim();
+            if (!q) return "Please type a question. I can help with depth, area, amplitudes, export and navigation.";
+            const hit = assistantKnowledgeBase.find(item => item.test.test(q));
+            if (hit) return hit.getAnswer();
+
+            return [
+                "I can help with survey interpretation, controls and export steps.",
+                `Current dataset summary: ${surveyStats.sizeX} m x ${surveyStats.sizeY} m area, depth ${surveyStats.depthMin} m to ${surveyStats.depthMax} m.`,
+                "Try asking: depth range, survey area, high amplitude meaning, or export options."
+            ].join(' ');
+        }
+
+        function speakAssistantText(msg, onDone) {
+            const ttsUrl = `/api/tts?text=${encodeURIComponent(msg)}`;
+            const audio = new Audio(ttsUrl);
+            assistantLatestTTS = audio;
+            audio.volume = 1.0;
+            audio.onplay = () => {
+                const s = document.getElementById('assistantAudioStatus');
+                if (s) {
+                    s.textContent = "🎙️ Streaming...";
+                    s.style.color = "#10b981";
+                }
+            };
+
+            audio.onended = () => {
+                const s = document.getElementById('assistantAudioStatus');
+                if (s) s.textContent = "🔊 Audio Active";
+                if (typeof onDone === 'function') onDone(true);
+            };
+
+            audio.onerror = () => {
+                const s = document.getElementById('assistantAudioStatus');
+                if (s) s.textContent = "⚠️ Stream Restricted";
+                if (typeof onDone === 'function') onDone(false);
+            };
+
+            wakeUpAudioHardware().then(() => {
+                audio.play().catch(() => {
+                    if (typeof onDone === 'function') onDone(false);
+                });
+            });
+        }
+
+        window.useAssistantQuickQuestion = function (q) {
+            const input = document.getElementById('assistantQuestionInput');
+            if (!input) return;
+            input.value = q;
+            window.askAssistantQuestion();
+        };
+
+        window.askAssistantQuestion = function () {
+            const input = document.getElementById('assistantQuestionInput');
+            if (!input) return;
+
+            const question = (input.value || '').trim();
+            if (!question) return;
+            appendAssistantChatMessage('You', question);
+            input.value = '';
+
+            if (assistantLatestTTS) {
+                try { assistantLatestTTS.pause(); } catch (_) { }
+            }
+
+            const answer = getAssistantAnswer(question);
+            appendAssistantChatMessage('Assistant', answer);
+            showAssistantSpeech(answer);
+            speakAssistantText(answer);
+        };
+
         window.toggleAssistant = function (enabled) {
             if (enabled) {
                 wakeUpAudioHardware(); // Wake hardware on toggle
@@ -6179,6 +6375,7 @@
                 } else {
                     assistantModel.visible = true;
                     if (assistantSpeechBubble) assistantSpeechBubble.visible = true;
+                    window.placeAssistantNearViewer();
                 }
                 document.getElementById('btnStartInsights').style.display = 'block';
                 document.getElementById('btnExplainAgain').style.display = 'block';
@@ -6223,36 +6420,49 @@
         };
 
         function loadAssistantModel() {
-            gltfLoader.load('/static/assistant_avatar.glb', function (gltf) {
-                assistantModel = gltf.scene;
-                // Scale and position near the survey origin
-                assistantModel.scale.set(1.5, 1.5, 1.5);
-                assistantModel.position.set(5, 0, 5); // Default near origin
-                scene.add(assistantModel);
+            const avatarCandidates = [
+                '/static/human_assistant.glb',
+                '/static/assistant_human.glb',
+                '/static/assistant_avatar.glb'
+            ];
 
-                // Set up animations
-                assistantMixer = new THREE.AnimationMixer(assistantModel);
-                gltf.animations.forEach(clip => {
-                    assistantActions[clip.name] = assistantMixer.clipAction(clip);
-                });
-
-                // Start with Idle animation
-                if (assistantActions['Dance']) { // Robot has 'Dance', 'Death', 'Idle', 'Jump', 'No', 'Walking', 'WalkingBackwards', 'Wave', 'Yes'
-                    // For RobotExpressive.glb, common ones are Idle, Walking, Wave, etc.
-                    // Using 'Idle' if available
-                    activeAction = assistantActions['Idle'] || assistantActions['Wave'];
-                    if (activeAction) activeAction.play();
+            function tryLoad(idx) {
+                if (idx >= avatarCandidates.length) {
+                    console.error('Error loading assistant avatar: no candidate model could be loaded.');
+                    return;
                 }
 
-                // Create speech bubble
-                createSpeechBubble();
+                const candidate = avatarCandidates[idx];
+                gltfLoader.load(candidate, function (gltf) {
+                    assistantModel = gltf.scene;
+                    assistantModel.scale.set(1.2, 1.2, 1.2);
+                    assistantModel.position.set(5, 0, 5);
+                    scene.add(assistantModel);
 
-                // Show first insight
-                setTimeout(() => nextAssistantInsight(), 1000);
+                    const status = document.getElementById('assistantAudioStatus');
+                    if (status) {
+                        const label = candidate.includes('assistant_avatar.glb') ? 'Guide Ready (legacy avatar)' : 'Guide Ready (human avatar)';
+                        status.textContent = '🧍 ' + label;
+                        status.style.color = '#10b981';
+                    }
 
-            }, undefined, function (error) {
-                console.error('Error loading assistant avatar:', error);
-            });
+                    assistantMixer = new THREE.AnimationMixer(assistantModel);
+                    gltf.animations.forEach(clip => {
+                        assistantActions[clip.name] = assistantMixer.clipAction(clip);
+                    });
+
+                    activeAction = assistantActions['Idle'] || assistantActions['StandingIdle'] || assistantActions['Wave'] || null;
+                    if (activeAction) activeAction.play();
+
+                    createSpeechBubble();
+                    window.placeAssistantNearViewer();
+                    setTimeout(() => nextAssistantInsight(), 800);
+                }, undefined, function () {
+                    tryLoad(idx + 1);
+                });
+            }
+
+            tryLoad(0);
         }
 
         function createSpeechBubble() {
@@ -6294,21 +6504,7 @@
             const msg = assistantInsights[currentInsightIndex];
             showAssistantSpeech(msg);
 
-            // Use Internal Streaming Audio to bypass Quest restrictions
-            const ttsUrl = `/api/tts?text=${encodeURIComponent(msg)}`;
-            const audio = new Audio(ttsUrl);
-            audio.volume = 1.0;
-            audio.onplay = () => {
-                const s = document.getElementById('assistantAudioStatus');
-                if (s) {
-                    s.textContent = "🎙️ Streaming...";
-                    s.style.color = "#10b981";
-                }
-            };
-
-            audio.onended = () => {
-                const s = document.getElementById('assistantAudioStatus');
-                if (s) s.textContent = "🔊 Audio Active";
+            speakAssistantText(msg, () => {
                 if (isContinuousMode) {
                     currentInsightIndex++;
                     if (currentInsightIndex < assistantInsights.length) {
@@ -6320,16 +6516,6 @@
                 } else {
                     currentInsightIndex = (currentInsightIndex + 1) % assistantInsights.length;
                 }
-            };
-
-            audio.onerror = (e) => {
-                const s = document.getElementById('assistantAudioStatus');
-                if (s) s.textContent = "⚠️ Stream Restricted";
-                currentInsightIndex = (currentInsightIndex + 1) % assistantInsights.length;
-            };
-
-            wakeUpAudioHardware().then(() => {
-                audio.play().catch(err => console.warn("Playback failed:", err));
             });
 
             // Trigger animation
@@ -8508,6 +8694,22 @@
                 assistantModel.rotation.y = val * Math.PI / 180;
             }
         });
+        const assistantAutoFaceToggle = document.getElementById('assistantAutoFace');
+        if (assistantAutoFaceToggle) {
+            assistantAutoFaceViewer = assistantAutoFaceToggle.checked;
+            assistantAutoFaceToggle.addEventListener('change', (e) => {
+                assistantAutoFaceViewer = e.target.checked;
+            });
+        }
+        const assistantQuestionInput = document.getElementById('assistantQuestionInput');
+        if (assistantQuestionInput) {
+            assistantQuestionInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    window.askAssistantQuestion();
+                }
+            });
+        }
         document.getElementById('posXSlider').addEventListener('input', (e) => {
             const val = parseFloat(e.target.value);
             document.getElementById('posXValue').textContent = val.toFixed(1);
@@ -9910,6 +10112,8 @@
                     this.renderGeoContent(ctx);
                 } else if (this.mode === 'survey') {
                     this.renderSurveyContent(ctx);
+                } else if (this.mode === 'ruler') {
+                    this.renderRulerContent(ctx);
                 } else if (this.mode === 'annotations') {
                     this.renderAnnotationsContent(ctx);
                 } else if (this.mode === 'ann_keyboard') {
@@ -10235,6 +10439,58 @@
                 this.renderActionButton(ctx, 680, 726, 290, 78, 'Apply Spacing', 'survey.applySpacing');
             }
 
+            renderRulerContent(ctx) {
+                this.renderHeaderActionButtons(ctx);
+
+                const activeTab = typeof activeRulerTab !== 'undefined' ? activeRulerTab : 'line';
+                const pointCount = Array.isArray(rulerPoints) ? rulerPoints.length : 0;
+                const rulerOn = !!window.isRulerActive;
+
+                ctx.fillStyle = '#e2e8f0';
+                ctx.font = "700 44px 'Inter', sans-serif";
+                ctx.textAlign = 'center';
+                ctx.fillText('Ruler (VR Native)', 512, 170);
+
+                ctx.fillStyle = '#93c5fd';
+                ctx.font = "600 24px 'Inter', sans-serif";
+                ctx.textAlign = 'left';
+                ctx.fillText(`Status: ${rulerOn ? 'ACTIVE' : 'INACTIVE'}`, 60, 238);
+                ctx.fillText(`Mode: ${activeTab}`, 60, 270);
+                ctx.fillText(`Points: ${pointCount}`, 60, 302);
+                ctx.fillText('Select mode, then Start Measuring and click scene with trigger.', 60, 336);
+
+                this.renderActionButton(ctx, 60, 390, 280, 78,
+                    rulerOn ? 'Stop Measuring' : 'Start Measuring',
+                    rulerOn ? 'ruler.stop' : 'ruler.start',
+                    rulerOn ? 'rgba(239,68,68,0.28)' : 'rgba(34,197,94,0.28)'
+                );
+                this.renderActionButton(ctx, 360, 390, 280, 78, 'Clear', 'ruler.clear', 'rgba(239,68,68,0.28)');
+                this.renderActionButton(ctx, 660, 390, 300, 78, 'Save Measurement', 'ruler.save', 'rgba(59,130,246,0.28)');
+
+                this.renderActionButton(ctx, 60, 500, 145, 72, 'Line', 'ruler.mode.line', activeTab === 'line' ? 'rgba(14,165,233,0.35)' : 'rgba(255,255,255,0.1)');
+                this.renderActionButton(ctx, 220, 500, 145, 72, 'Path', 'ruler.mode.path', activeTab === 'path' ? 'rgba(14,165,233,0.35)' : 'rgba(255,255,255,0.1)');
+                this.renderActionButton(ctx, 380, 500, 145, 72, 'Polygon', 'ruler.mode.polygon', activeTab === 'polygon' ? 'rgba(14,165,233,0.35)' : 'rgba(255,255,255,0.1)');
+                this.renderActionButton(ctx, 540, 500, 145, 72, 'Circle', 'ruler.mode.circle', activeTab === 'circle' ? 'rgba(14,165,233,0.35)' : 'rgba(255,255,255,0.1)');
+                this.renderActionButton(ctx, 700, 500, 145, 72, '3D Path', 'ruler.mode.3d_path', activeTab === '3d_path' ? 'rgba(14,165,233,0.35)' : 'rgba(255,255,255,0.1)');
+                this.renderActionButton(ctx, 860, 500, 104, 72, '3D Poly', 'ruler.mode.3d_polygon', activeTab === '3d_polygon' ? 'rgba(14,165,233,0.35)' : 'rgba(255,255,255,0.1)');
+
+                this.renderActionButton(ctx, 60, 608, 290, 78, 'Export KML', 'ruler.exportKML');
+                this.renderActionButton(ctx, 370, 608, 290, 78, 'Export KMZ', 'ruler.exportKMZ');
+                this.renderActionButton(ctx, 680, 608, 290, 78, 'Export SHP', 'ruler.exportSHP');
+
+                const lineMap = document.getElementById('ruler-line-map-length')?.textContent || '0.00';
+                const lineGround = document.getElementById('ruler-line-ground-length')?.textContent || '0.00';
+                const pathLen = document.getElementById('ruler-path-length')?.textContent || '0.00';
+                const polyArea = document.getElementById('ruler-poly-area')?.textContent || '0.00';
+
+                ctx.fillStyle = '#cbd5e1';
+                ctx.font = "600 22px 'Inter', sans-serif";
+                ctx.fillText(`Line Map: ${lineMap}`, 60, 740);
+                ctx.fillText(`Line Ground: ${lineGround}`, 60, 774);
+                ctx.fillText(`Path Length: ${pathLen}`, 60, 808);
+                ctx.fillText(`Polygon Area: ${polyArea}`, 60, 842);
+            }
+
             renderAnnotationsContent(ctx) {
                 this.renderHeaderActionButtons(ctx);
 
@@ -10477,6 +10733,8 @@
                         this.mode = 'geo';
                     } else if (tabId === 'survey') {
                         this.mode = 'survey';
+                    } else if (tabId === 'ruler') {
+                        this.mode = 'ruler';
                     } else if (tabId === 'annotations') {
                         this.mode = 'annotations';
                     } else {
@@ -10713,6 +10971,38 @@
                     window.printSurveyPlan();
                 } else if (action === 'survey.applySpacing' && surveySpacing) {
                     surveySpacing.dispatchEvent(new Event('input'));
+                } else if (action === 'ruler.start') {
+                    window.isRulerActive = true;
+                    document.body.classList.add('ruler-active');
+                    const bar = document.getElementById('ruler-instruction-bar');
+                    if (bar) bar.classList.add('active');
+                    this.hide();
+                } else if (action === 'ruler.stop') {
+                    window.isRulerActive = false;
+                    document.body.classList.remove('ruler-active');
+                    const bar = document.getElementById('ruler-instruction-bar');
+                    if (bar) bar.classList.remove('active');
+                } else if (action.startsWith('ruler.mode.') && window.switchRulerTab) {
+                    window.switchRulerTab(action.replace('ruler.mode.', ''));
+                    // Match annotations UX: selecting a tool enters placement mode immediately.
+                    window.isRulerActive = true;
+                    document.body.classList.add('ruler-active');
+                    const bar = document.getElementById('ruler-instruction-bar');
+                    if (bar) bar.classList.add('active');
+                    if (window.vrTutorial && window.vrTutorial.active) {
+                        window.vrTutorial.stop();
+                    }
+                    this.hide();
+                } else if (action === 'ruler.clear' && window.clearRulerMeasurement) {
+                    window.clearRulerMeasurement();
+                } else if (action === 'ruler.save' && window.saveRulerMeasurement) {
+                    window.saveRulerMeasurement();
+                } else if (action === 'ruler.exportKML' && window.exportRulerAsKML) {
+                    window.exportRulerAsKML();
+                } else if (action === 'ruler.exportKMZ' && window.exportRulerAsKMZ) {
+                    window.exportRulerAsKMZ();
+                } else if (action === 'ruler.exportSHP' && window.exportRulerAsShapefile) {
+                    window.exportRulerAsShapefile();
                 } else if (action.startsWith('ann.tool.') && ann && ann.setTool) {
                     ann.setTool(action.replace('ann.tool.', ''));
                     if (window.vrTutorial && window.vrTutorial.active) {
@@ -10841,6 +11131,83 @@
         window.vrFeaturePanel = vrFeaturePanel;
         window.vrDomOverlayEnabled = false;
 
+        function placeRulerPointFromController(controller) {
+            if (!window.isRulerActive || !renderer.xr.isPresenting) return false;
+
+            const raycaster = new THREE.Raycaster();
+            const tempMatrix = new THREE.Matrix4();
+            tempMatrix.identity().extractRotation(controller.matrixWorld);
+            raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
+            raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix).normalize();
+            raycaster.params.Points = { threshold: 0.08 };
+
+            let hitPoint = null;
+
+            // Use same robust picking flow annotations use when available.
+            if (window.annMgr && typeof window.annMgr._pickPointFromRaycaster === 'function') {
+                hitPoint = window.annMgr._pickPointFromRaycaster(raycaster);
+            }
+
+            // Fallback: generic scene picking excluding ruler/UI objects.
+            if (!hitPoint) {
+                const hits = raycaster.intersectObjects(scene.children, true);
+                for (let i = 0; i < hits.length; i++) {
+                    let current = hits[i].object;
+                    let skip = false;
+                    while (current) {
+                        if (current === rulerGraphics || current === vrFeaturePanel.panelGroup || current === vrTutorial.panelGroup) {
+                            skip = true;
+                            break;
+                        }
+                        current = current.parent;
+                    }
+                    if (!skip) {
+                        hitPoint = hits[i].point.clone();
+                        break;
+                    }
+                }
+            }
+
+            if (!hitPoint) {
+                const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+                const candidate = new THREE.Vector3();
+                if (raycaster.ray.intersectPlane(groundPlane, candidate)) {
+                    hitPoint = candidate;
+                }
+            }
+
+            if (!hitPoint) return false;
+
+            hitPoint.y += 0.005;
+            addRulerPoint(hitPoint);
+
+            const counter = document.getElementById('ruler-point-counter');
+            if (counter) counter.textContent = `📍 ${rulerPoints.length} point${rulerPoints.length !== 1 ? 's' : ''} placed`;
+
+            // Keep export panel and instruction text in sync for controller-based drawing too.
+            if (typeof updateExportPanel === 'function') updateExportPanel();
+            const bar = document.getElementById('ruler-instruction-bar');
+            if (bar) {
+                if (activeRulerTab === 'line') {
+                    bar.textContent = rulerPoints.length === 1
+                        ? '📐 Click a second point to complete the line'
+                        : '✅ Line complete — trigger to start over or continue in panel';
+                } else if (activeRulerTab === 'path' || activeRulerTab === '3d_path') {
+                    bar.textContent = `📐 ${rulerPoints.length} point${rulerPoints.length !== 1 ? 's' : ''} — keep triggering to extend`;
+                } else if (activeRulerTab === 'polygon' || activeRulerTab === '3d_polygon') {
+                    bar.textContent = rulerPoints.length >= 3
+                        ? `🔷 ${rulerPoints.length} points — area updating live`
+                        : `🔷 ${rulerPoints.length} point${rulerPoints.length !== 1 ? 's' : ''} — need ${3 - rulerPoints.length} more for area`;
+                } else if (activeRulerTab === 'circle') {
+                    bar.textContent = rulerPoints.length === 1
+                        ? '⭕ Trigger to set radius endpoint'
+                        : '✅ Circle complete — trigger to redraw';
+                }
+            }
+
+            return true;
+        }
+
         // Interaction for VR Buttons: Left and Right triggers can click the panel
         [controller0, controller1].forEach(c => {
             c.addEventListener('selectstart', () => {
@@ -10849,12 +11216,6 @@
                 tempMatrix.identity().extractRotation(c.matrixWorld);
                 raycaster.ray.origin.setFromMatrixPosition(c.matrixWorld);
                 raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
-
-                // If annotation tool is active, placement should win over tutorial panel clicks.
-                if (window.annMgr && window.annMgr.activeTool && renderer.xr.isPresenting) {
-                    const placed = window.annMgr.placeFromController(c);
-                    if (placed) return;
-                }
 
                 if (vrFeaturePanel.active) {
                     const featureHits = raycaster.intersectObject(vrFeaturePanel.panelMesh);
@@ -10871,7 +11232,11 @@
                     }
                 }
 
-                // Secondary placement attempt if panel/tutor did not consume trigger.
+                if (window.isRulerActive && renderer.xr.isPresenting) {
+                    if (placeRulerPointFromController(c)) return;
+                }
+
+                // If no panel consumed the trigger, place annotation into scene.
                 if (window.annMgr && window.annMgr.activeTool && renderer.xr.isPresenting) {
                     window.annMgr.placeFromController(c);
                 }
@@ -11398,8 +11763,15 @@
         renderer.setAnimationLoop(() => {
             const delta = clock.getDelta();
             if (assistantMixer) assistantMixer.update(delta);
+            if (assistantModel && assistantModel.visible && assistantAutoFaceViewer) {
+                faceAssistantTowardsCamera();
+            }
             if (assistantSpeechBubble && assistantSpeechBubble.visible) {
                 assistantSpeechBubble.quaternion.copy(camera.quaternion);
+                if (assistantModel) {
+                    assistantSpeechBubble.position.copy(assistantModel.position);
+                    assistantSpeechBubble.position.y += 3.5;
+                }
             }
 
             const isVR = renderer.xr.isPresenting;
@@ -12608,6 +12980,40 @@
         let surveyGridGroup = new THREE.Group();
         scene.add(surveyGridGroup);
         let isDrawingSurvey = false;
+        let surveyGeneratedLengthMeters = 0;
+
+        const surveyCurrencyMeta = {
+            INR: { symbol: '₹', code: 'INR' },
+            USD: { symbol: '$', code: 'USD' },
+            EUR: { symbol: '€', code: 'EUR' },
+            GBP: { symbol: '£', code: 'GBP' }
+        };
+
+        function updateSurveyCostEstimate() {
+            const rateInput = document.getElementById('surveyCostRateInput');
+            const currencySelect = document.getElementById('surveyCostCurrency');
+            const lengthEl = document.getElementById('surveyCostLength');
+            const rateDisplayEl = document.getElementById('surveyCostRateDisplay');
+            const totalEl = document.getElementById('surveyEstimatedCost');
+
+            if (!rateInput || !currencySelect || !lengthEl || !rateDisplayEl || !totalEl) return;
+
+            const rateRaw = parseFloat(rateInput.value);
+            const ratePerMeter = Number.isFinite(rateRaw) && rateRaw >= 0 ? rateRaw : 0;
+            const currency = surveyCurrencyMeta[currencySelect.value] || surveyCurrencyMeta.INR;
+
+            const lengthValid = surveyGeneratedLengthMeters > 0;
+            lengthEl.textContent = lengthValid ? `${surveyGeneratedLengthMeters.toFixed(2)} m` : '-- m';
+            rateDisplayEl.textContent = `${currency.symbol} ${ratePerMeter.toFixed(2)} / m`;
+
+            if (!lengthValid) {
+                totalEl.textContent = '--';
+                return;
+            }
+
+            const totalCost = surveyGeneratedLengthMeters * ratePerMeter;
+            totalEl.textContent = `${currency.symbol} ${totalCost.toFixed(2)} (${currency.code})`;
+        }
 
         window.startSurveyGridDraw = function() {
             clearSurveyGrid();
@@ -12685,6 +13091,9 @@
             document.getElementById('surveyInsightVLines').textContent = "--";
             document.getElementById('surveyInsightTotalLines').textContent = "--";
             document.getElementById('surveyInsightTime').textContent = "--";
+
+            surveyGeneratedLengthMeters = 0;
+            updateSurveyCostEstimate();
         };
 
         window.generateSurveyGrid = function() {
@@ -12832,6 +13241,9 @@
             document.getElementById('surveyInsightHLines').textContent = hLines;
             document.getElementById('surveyInsightVLines').textContent = vLines;
             document.getElementById('surveyInsightTotalLines').textContent = (hLines + vLines);
+
+            surveyGeneratedLengthMeters = totalLength;
+            updateSurveyCostEstimate();
             
             // Assume 1 meter/second walk speed + 5 second turnover per sweep line
             let timeSec = totalLength + (hLines + vLines) * 5; 
@@ -12851,6 +13263,18 @@
         window.toggleSurveyGeneratedGrid = function(show) {
             surveyGridGroup.visible = show;
         };
+
+        const surveyCostRateInput = document.getElementById('surveyCostRateInput');
+        if (surveyCostRateInput) {
+            surveyCostRateInput.addEventListener('input', updateSurveyCostEstimate);
+        }
+
+        const surveyCostCurrency = document.getElementById('surveyCostCurrency');
+        if (surveyCostCurrency) {
+            surveyCostCurrency.addEventListener('change', updateSurveyCostEstimate);
+        }
+
+        updateSurveyCostEstimate();
 
         window.refreshSurveyWeather = async function() {
             const tempEl = document.getElementById('surveyWeatherTemp');
