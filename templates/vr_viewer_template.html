@@ -2052,6 +2052,10 @@
                         <input type="range" id="pipeKmlScaleSlider" min="0.1" max="10" step="0.1" value="1.0">
                     </div>
                     <div class="slider-container">
+                        <div class="slider-label"><span>Rotate X:</span><span id="pipeKmlRotXValue">0</span>°</div>
+                        <input type="range" id="pipeKmlRotXSlider" min="-180" max="180" step="1" value="0">
+                    </div>
+                    <div class="slider-container">
                         <div class="slider-label"><span>Rotate Y:</span><span id="pipeKmlRotYValue">0</span>°</div>
                         <input type="range" id="pipeKmlRotYSlider" min="0" max="360" step="1" value="0">
                     </div>
@@ -13943,6 +13947,8 @@
                 geometry.computeBoundingBox();
                 const center = new THREE.Vector3();
                 geometry.boundingBox.getCenter(center);
+                const size = new THREE.Vector3();
+                geometry.boundingBox.getSize(size);
                 geometry.translate(-center.x, -center.y, -center.z);
 
                 const mat = new THREE.MeshStandardMaterial({ 
@@ -13962,20 +13968,46 @@
                 window.pipeKmlGroup.add(pipeMesh);
                 surveyAssembly.add(window.pipeKmlGroup);
 
-                // Convert Lat/Lon to scene local meters
-                const origin = (typeof geoOrigin !== 'undefined') ? geoOrigin : mapOrigin;
-                const pos = latLonToMeters({ lat, lon }, origin);
+                // Convert Lat/Lon to scene local meters using the same reference frame as DXF.
+                const hasGeoOrigin = (typeof geoOrigin !== 'undefined') && (geoOrigin.lat !== 0 || geoOrigin.lon !== 0);
+                const hasMapOrigin = (typeof mapOrigin !== 'undefined') && (mapOrigin.lat !== 0 || mapOrigin.lon !== 0);
+                const origin = hasGeoOrigin ? geoOrigin : (hasMapOrigin ? mapOrigin : null);
+
+                let pos = { x: 0, z: 0 };
+                if (origin && typeof latLonToUTM44N === 'function') {
+                    const pipeUTM = latLonToUTM44N(lat, lon);
+                    const originUTM = latLonToUTM44N(origin.lat, origin.lon);
+                    pos = {
+                        x: pipeUTM.e - originUTM.e,
+                        z: -(pipeUTM.n - originUTM.n)
+                    };
+                } else {
+                    const fallbackOrigin = origin || { lat: 0, lon: 0, alt: 0 };
+                    pos = latLonToMeters({ lat, lon }, fallbackOrigin);
+                }
+
+                const baseY = (alt - ((origin && origin.alt) || 0)) + 0.5;
                 
                 // Set group position to KML anchor
-                window.pipeKmlGroup.position.set(pos.x, 0.5, pos.z);
+                window.pipeKmlGroup.position.set(pos.x, baseY, pos.z);
                 
-                // Default rotation for PLY (usually needs -90deg X to lay flat)
-                pipeMesh.rotation.x = -Math.PI / 2;
+                // Auto-orient around X to minimize vertical thickness in scene Y.
+                // For X-rotation, only Y/Z extents matter: 0deg keeps Y, +/-90deg swaps Y<->Z.
+                let autoRotXDeg = 0;
+                if (size.z < size.y) {
+                    autoRotXDeg = -90;
+                }
+                pipeMesh.rotation.x = autoRotXDeg * Math.PI / 180;
 
                 // 4. Setup Fine-Tuning UI
                 controls.style.display = 'block';
                 status.textContent = `✅ Loaded at (${lat.toFixed(6)}, ${lon.toFixed(6)})`;
                 status.style.color = "#10b981";
+
+                const rotXSlider = document.getElementById('pipeKmlRotXSlider');
+                const rotXValue = document.getElementById('pipeKmlRotXValue');
+                if (rotXSlider) rotXSlider.value = String(autoRotXDeg);
+                if (rotXValue) rotXValue.textContent = String(autoRotXDeg);
 
                 const bind = (id, valId, cb) => {
                     const el = document.getElementById(id);
@@ -13990,8 +14022,9 @@
                 };
 
                 bind('pipeKmlScaleSlider', 'pipeKmlScaleValue', (v) => { window.pipeKmlGroup.scale.set(v, v, v); });
+                bind('pipeKmlRotXSlider', 'pipeKmlRotXValue', (v) => { pipeMesh.rotation.x = v * Math.PI / 180; });
                 bind('pipeKmlRotYSlider', 'pipeKmlRotYValue', (v) => { window.pipeKmlGroup.rotation.y = v * Math.PI / 180; });
-                bind('pipeKmlOffYSlider', 'pipeKmlOffYValue', (v) => { window.pipeKmlGroup.position.y = v; });
+                bind('pipeKmlOffYSlider', 'pipeKmlOffYValue', (v) => { window.pipeKmlGroup.position.y = baseY + v; });
                 
                 const baseMeters = {...pos};
                 bind('pipeKmlOffXSlider', 'pipeKmlOffXValue', (v) => { window.pipeKmlGroup.position.x = baseMeters.x + v; });
