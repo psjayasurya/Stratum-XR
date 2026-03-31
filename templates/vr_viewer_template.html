@@ -266,6 +266,15 @@
             scrollbar-width: thin;
             scrollbar-color: #555 transparent;
             animation: vrPopIn 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+            cursor: grab;
+            transition: box-shadow 0.2s, border-color 0.2s;
+            --modal-scale: 1;
+        }
+
+        .vr-tab-content.dragging {
+            cursor: grabbing;
+            box-shadow: 0 30px 80px rgba(0, 0, 0, 0.8);
+            border-color: var(--primary-color);
         }
 
         .vr-tab-content::-webkit-scrollbar {
@@ -307,6 +316,7 @@
             /* Almost transparent to allow clicking off the modal to close, but without darkening or blurring the scene */
             background: rgba(0, 0, 0, 0.05);
             z-index: 999;
+            pointer-events: none;
         }
 
         .vr-modal-backdrop.active {
@@ -344,6 +354,17 @@
             display: flex;
             align-items: center;
             gap: 10px;
+            user-select: none;
+            cursor: grab;
+            padding-bottom: 8px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.2s;
+        }
+
+        .vr-tab-content.dragging .vr-modal-title {
+            cursor: grabbing;
+            color: var(--primary-color);
+            text-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
         }
 
         .vr-modal-title i {
@@ -1651,11 +1672,11 @@
     <div id="ruler-instruction-bar">📐 Click on the 3D scene to place measurement points — Right-click to orbit</div>
 
     <!-- ====== MODAL BACKDROP (NOT used by ruler) ====== -->
-    <div class="vr-modal-backdrop" id="vrModalBackdrop" onclick="closeVRModals()"></div>
+    <div class="vr-modal-backdrop" id="vrModalBackdrop"></div>
 
     <!-- ====== TAB 1: LAYERS MODAL ====== -->
     <div id="vr-modal-layers" class="vr-tab-content">
-        <button class="vr-close-modal-btn" onclick="closeVRModals()"><i class="fas fa-times"></i></button>
+        <button class="vr-close-modal-btn" onclick="closeVRModal(this)"><i class="fas fa-times"></i></button>
         <h2 class="vr-modal-title"><i class="fas fa-layer-group"></i> Layers & Point Cloud</h2>
 
         <div id="grid-manager-section" style="display: none;">
@@ -1715,7 +1736,7 @@
 
     <!-- ====== TAB: SLICES MODAL ====== -->
     <div id="vr-modal-slices" class="vr-tab-content">
-        <button class="vr-close-modal-btn" onclick="closeVRModals()"><i class="fas fa-times"></i></button>
+        <button class="vr-close-modal-btn" onclick="closeVRModal(this)"><i class="fas fa-times"></i></button>
         <h2 class="vr-modal-title"><i class="fas fa-layer-group"></i> Depth Slicing Tools</h2>
 
         <div class="control-group" style="padding: 15px;">
@@ -1739,13 +1760,13 @@
                     value="[[DEPTH_MIN]]" oninput="updateDepthSlice(this.value)">
             </div>
             
-            <button class="vr-btn" onclick="closeVRModals()" style="width:100%; margin-top: 20px;">Done</button>
+            <button class="vr-btn" onclick="closeVRModal(this)" style="width:100%; margin-top: 20px;">Done</button>
         </div>
     </div>
 
     <!-- ====== TAB 2: VIEW MODAL ====== -->
     <div id="vr-modal-view" class="vr-tab-content">
-        <button class="vr-close-modal-btn" onclick="closeVRModals()"><i class="fas fa-times"></i></button>
+        <button class="vr-close-modal-btn" onclick="closeVRModal(this)"><i class="fas fa-times"></i></button>
         <h2 class="vr-modal-title"><i class="fas fa-eye"></i> View Controls</h2>
 
         <div class="control-group">
@@ -1859,7 +1880,7 @@
 
     <!-- ====== TAB 3: MESH & LIDAR MODAL ====== -->
     <div id="vr-modal-mesh" class="vr-tab-content">
-        <button class="vr-close-modal-btn" onclick="closeVRModals()"><i class="fas fa-times"></i></button>
+        <button class="vr-close-modal-btn" onclick="closeVRModal(this)"><i class="fas fa-times"></i></button>
         <h2 class="vr-modal-title"><i class="fas fa-cube"></i> Mesh & LiDAR</h2>
 
         <div style="margin-bottom: 15px; padding: 0 5px;">
@@ -2761,7 +2782,7 @@
 
     <!-- ====== TAB 5: GEO MODAL ====== -->
     <div id="vr-modal-geo" class="vr-tab-content">
-        <button class="vr-close-modal-btn" onclick="closeVRModals()"><i class="fas fa-times"></i></button>
+        <button class="vr-close-modal-btn" onclick="closeVRModal(this)"><i class="fas fa-times"></i></button>
         <h2 class="vr-modal-title"><i class="fas fa-globe-americas"></i> Geo-Reference & Alignment</h2>
 
         <div class="control-group">
@@ -2873,7 +2894,7 @@
 
     <!-- ====== TAB: SURVEY PLAN MODAL ====== -->
     <div id="vr-modal-survey" class="vr-tab-content">
-        <button class="vr-close-modal-btn" onclick="closeVRModals()"><i class="fas fa-times"></i></button>
+        <button class="vr-close-modal-btn" onclick="closeVRModal(this)"><i class="fas fa-times"></i></button>
         <h2 class="vr-modal-title"><i class="fas fa-map"></i> Survey Plan & Coverage</h2>
 
         <!-- Import Boundary from File -->
@@ -3038,7 +3059,7 @@
 
     <!-- ====== TAB 5: COLLABORATION MODAL ====== -->
     <div id="vr-modal-collab" class="vr-tab-content">
-        <button class="vr-close-modal-btn" onclick="closeVRModals()"><i class="fas fa-times"></i></button>
+        <button class="vr-close-modal-btn" onclick="closeVRModal(this)"><i class="fas fa-times"></i></button>
         <h2 class="vr-modal-title"><i class="fas fa-users"></i> Collaboration Session</h2>
 
         <div id="session-status" style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px; display: none;">
@@ -3078,7 +3099,7 @@
 
     <!-- ====== TAB 6: INFO MODAL ====== -->
     <div id="vr-modal-about" class="vr-tab-content">
-        <button class="vr-close-modal-btn" onclick="closeVRModals()"><i class="fas fa-times"></i></button>
+        <button class="vr-close-modal-btn" onclick="closeVRModal(this)"><i class="fas fa-times"></i></button>
         <h2 class="vr-modal-title"><i class="fas fa-info-circle"></i> File Info & Instructions</h2>
 
         <div id="data-info" style="margin-bottom: 15px;">
@@ -3292,7 +3313,7 @@
 
     <!-- ====== TAB: ANNOTATIONS MODAL ====== -->
     <div id="vr-modal-annotations" class="vr-tab-content">
-        <button class="vr-close-modal-btn" onclick="closeVRModals()"><i class="fas fa-times"></i></button>
+        <button class="vr-close-modal-btn" onclick="closeVRModal(this)"><i class="fas fa-times"></i></button>
         <h2 class="vr-modal-title"><i class="fas fa-sticky-note"></i> Annotations</h2>
 
         <!-- Tool Palette -->
@@ -4325,13 +4346,12 @@
 
             // For all other tabs: close ruler if open, restore controls
             window.closeRulerPanel(false); // don't clear measurements when switching tabs
-            closeVRModals();
 
             // Highlight the clicked tab button
             const btn = document.querySelector(`button[onclick="switchVRTab('${tabName}')\"]`);
             if (btn) btn.classList.add('active');
 
-            // Show the modal popup and backdrop
+            // Show the modal popup and backdrop (do not close other tabs)
             const modal = document.getElementById('vr-modal-' + tabName);
             if (modal) modal.classList.add('active');
 
@@ -4371,6 +4391,131 @@
             const backdrop = document.getElementById('vrModalBackdrop');
             if (backdrop) backdrop.classList.remove('active');
         };
+
+        window.closeVRModal = function (triggerEl) {
+            const modal = triggerEl?.closest('.vr-tab-content');
+            if (!modal || modal.id === 'vr-modal-ruler') return;
+
+            modal.classList.remove('active');
+
+            const tabId = modal.id.replace('vr-modal-', '');
+            document.querySelector(`button[onclick="switchVRTab('${tabId}')"]`)?.classList.remove('active');
+
+            const anyOpen = document.querySelector('.vr-tab-content.active:not(#vr-modal-ruler)');
+            const backdrop = document.getElementById('vrModalBackdrop');
+            if (!anyOpen && backdrop) backdrop.classList.remove('active');
+        };
+
+        // ===== DRAGGABLE & SCALABLE MODAL INITIALIZATION =====
+        const modalStates = {}; // Track position and scale for each modal
+
+        function initializeModalDragAndScale() {
+            const modals = document.querySelectorAll('.vr-tab-content');
+            
+            modals.forEach(modal => {
+                const modalId = modal.id;
+                
+                // Initialize state for this modal
+                modalStates[modalId] = {
+                    isDragging: false,
+                    startX: 0,
+                    startY: 0,
+                    offsetX: 0,
+                    offsetY: 0,
+                    scale: 1,
+                    position: { x: 0, y: 0 }
+                };
+
+                // Find the title element for drag handle
+                const titleBar = modal.querySelector('.vr-modal-title');
+                if (!titleBar) return;
+
+                // Drag initialization on title bar
+                titleBar.addEventListener('mousedown', (e) => {
+                    const state = modalStates[modalId];
+                    state.isDragging = true;
+                    state.startX = e.clientX - state.offsetX;
+                    state.startY = e.clientY - state.offsetY;
+                    modal.classList.add('dragging');
+                });
+
+                // Drag move
+                document.addEventListener('mousemove', (e) => {
+                    const state = modalStates[modalId];
+                    if (!state.isDragging) return;
+
+                    state.offsetX = e.clientX - state.startX;
+                    state.offsetY = e.clientY - state.startY;
+                    state.position.x = state.offsetX;
+                    state.position.y = state.offsetY;
+
+                    // Apply transform
+                    updateModalTransform(modal, state);
+                });
+
+                // Drag end
+                document.addEventListener('mouseup', () => {
+                    const state = modalStates[modalId];
+                    if (state.isDragging) {
+                        state.isDragging = false;
+                        modal.classList.remove('dragging');
+                    }
+                });
+
+                // Scale with mouse wheel (when hovering over modal)
+                modal.addEventListener('wheel', (e) => {
+                    if (e.ctrlKey || e.metaKey) {
+                        e.preventDefault();
+                        const state = modalStates[modalId];
+                        const delta = e.deltaY > 0 ? -0.05 : 0.05;
+                        state.scale = Math.max(0.6, Math.min(2.0, state.scale + delta));
+                        updateModalTransform(modal, state);
+                    }
+                });
+
+                // Prevent text selection during drag
+                titleBar.addEventListener('selectstart', (e) => {
+                    if (modalStates[modalId].isDragging) e.preventDefault();
+                });
+            });
+        }
+
+        function updateModalTransform(modal, state) {
+            const isRuler = modal.id === 'vr-modal-ruler';
+            
+            if (isRuler) {
+                // Special handling for ruler - constrain to right side, allow vertical movement
+                modal.style.position = 'fixed';
+                modal.style.right = '16px';
+                modal.style.left = 'auto';
+                modal.style.top = 'auto';
+                modal.style.bottom = 'auto';
+                modal.style.transform = `translateY(${state.offsetY}px) scale(${state.scale})`;
+            } else {
+                // Regular modals - free positioning in all directions
+                modal.style.position = 'fixed';
+                modal.style.left = 'auto';
+                modal.style.top = 'auto';
+                modal.style.right = 'auto';
+                modal.style.bottom = 'auto';
+                // Translate from initial position (16px left, center vertically) plus current offsets
+                modal.style.transform = `translate(calc(16px + ${state.offsetX}px), calc(-50vh + ${state.offsetY}px)) translateY(50vh) scale(${state.scale})`;
+                modal.style.transformOrigin = 'center center';
+            }
+        }
+
+        // Initialize dragging when modals are shown
+        const originalSwitchVRTab = window.switchVRTab;
+        window.switchVRTab = function(tabName) {
+            originalSwitchVRTab(tabName);
+            setTimeout(() => initializeModalDragAndScale(), 50);
+        };
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', initializeModalDragAndScale);
+        
+        // Also init after a brief delay to ensure DOM is ready
+        setTimeout(initializeModalDragAndScale, 100);
 
         // ===== SURVEY PLAN FUNCTIONS =====
         window.initSurveyPlan = function (ply, potree) {
@@ -13960,30 +14105,62 @@
 
                 const pipeMesh = new THREE.Mesh(geometry, mat);
                 
-                // 3. Create Group and Position in Scene
-                if (window.pipeKmlGroup) {
-                    surveyAssembly.remove(window.pipeKmlGroup);
+                // 3. Resolve associated grid from uploaded KML anchor
+                let targetGrid = null;
+                let targetGridIndex = -1;
+                let targetAnchor = null;
+                let bestScore = Number.POSITIVE_INFINITY;
+
+                if (Array.isArray(projectGrids) && projectGrids.length > 0) {
+                    projectGrids.forEach((g, i) => {
+                        const anchor = (g && g.info && g.info.settings && g.info.settings.kml_anchor)
+                            ? g.info.settings.kml_anchor
+                            : (i === 0 ? mapOrigin : null);
+                        if (!anchor || typeof anchor.lat !== 'number' || typeof anchor.lon !== 'number') return;
+
+                        const dLat = lat - anchor.lat;
+                        const dLon = lon - anchor.lon;
+                        const score = (dLat * dLat) + (dLon * dLon);
+                        if (score < bestScore) {
+                            bestScore = score;
+                            targetGrid = g;
+                            targetGridIndex = i;
+                            targetAnchor = anchor;
+                        }
+                    });
+                }
+
+                // 4. Create Group and Position in Scene
+                if (window.pipeKmlGroup && window.pipeKmlGroup.parent) {
+                    window.pipeKmlGroup.parent.remove(window.pipeKmlGroup);
                 }
                 window.pipeKmlGroup = new THREE.Group();
                 window.pipeKmlGroup.add(pipeMesh);
                 surveyAssembly.add(window.pipeKmlGroup);
 
-                // Convert Lat/Lon to scene local meters using the same reference frame as DXF.
+                // Convert Lat/Lon to scene meters anchored to the matched grid's KML origin.
                 const hasGeoOrigin = (typeof geoOrigin !== 'undefined') && (geoOrigin.lat !== 0 || geoOrigin.lon !== 0);
                 const hasMapOrigin = (typeof mapOrigin !== 'undefined') && (mapOrigin.lat !== 0 || mapOrigin.lon !== 0);
-                const origin = hasGeoOrigin ? geoOrigin : (hasMapOrigin ? mapOrigin : null);
+                const fallbackOrigin = hasGeoOrigin ? geoOrigin : (hasMapOrigin ? mapOrigin : null);
+                const origin = targetAnchor || fallbackOrigin;
+
+                const anchorWorld = new THREE.Vector3(0, 0, 0);
+                if (targetGrid && targetGrid.group) {
+                    targetGrid.group.getWorldPosition(anchorWorld);
+                }
 
                 let pos = { x: 0, z: 0 };
                 if (origin && typeof latLonToUTM44N === 'function') {
                     const pipeUTM = latLonToUTM44N(lat, lon);
                     const originUTM = latLonToUTM44N(origin.lat, origin.lon);
                     pos = {
-                        x: pipeUTM.e - originUTM.e,
-                        z: -(pipeUTM.n - originUTM.n)
+                        x: anchorWorld.x + (pipeUTM.e - originUTM.e),
+                        z: anchorWorld.z - (pipeUTM.n - originUTM.n)
                     };
                 } else {
-                    const fallbackOrigin = origin || { lat: 0, lon: 0, alt: 0 };
-                    pos = latLonToMeters({ lat, lon }, fallbackOrigin);
+                    const base = origin || { lat: 0, lon: 0, alt: 0 };
+                    const rel = latLonToMeters({ lat, lon }, base);
+                    pos = { x: anchorWorld.x + rel.x, z: anchorWorld.z + rel.z };
                 }
 
                 const baseY = (alt - ((origin && origin.alt) || 0)) + 0.5;
@@ -13999,9 +14176,15 @@
                 }
                 pipeMesh.rotation.x = autoRotXDeg * Math.PI / 180;
 
-                // 4. Setup Fine-Tuning UI
+                // If matched, switch to that grid so controls and overlay context are consistent.
+                if (targetGridIndex >= 0 && typeof window.setActiveGrid === 'function') {
+                    window.setActiveGrid(targetGridIndex);
+                }
+
+                // 5. Setup Fine-Tuning UI
                 controls.style.display = 'block';
-                status.textContent = `✅ Loaded at (${lat.toFixed(6)}, ${lon.toFixed(6)})`;
+                const gridName = (targetGrid && targetGrid.group && targetGrid.group.name) ? targetGrid.group.name : 'default grid';
+                status.textContent = `✅ Loaded & snapped to ${gridName} (${lat.toFixed(6)}, ${lon.toFixed(6)})`;
                 status.style.color = "#10b981";
 
                 const rotXSlider = document.getElementById('pipeKmlRotXSlider');
