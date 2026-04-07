@@ -18,23 +18,67 @@ router = APIRouter()
 # }
 session_store: Dict[str, dict] = {}
 
+def _init_session_state(session_id: str):
+    if session_id not in session_store:
+        session_store[session_id] = {
+            "participants": [],
+            "annotations": [],
+            "transcripts": [],
+            "ruler": {
+                "tab": "line",
+                "points": [],
+                "units": {},
+                "updated_at": None
+            },
+            "survey": {
+                "points": [],
+                "is_drawing": False,
+                "spacing": 1.0,
+                "rotation": 0.0,
+                "generated": False,
+                "updated_at": None
+            },
+            "depth": {
+                "slice_active": False,
+                "slice2d_active": False,
+                "depth_value": None,
+                "updated_at": None
+            },
+            "draw": {
+                "ops": [],
+                "updated_at": None
+            },
+            "camera": {
+                "position": None,
+                "target": None,
+                "updated_at": None
+            },
+            "model": {
+                "link_all": False,
+                "main": {"pos": None, "scale": None, "rot_deg": None},
+                "grids": {"pos": None, "scale": None, "rot_deg": None},
+                "updated_at": None
+            },
+            "locks": {},
+            "socket_users": {}
+        }
+
+def _get_session_state(session_id: str) -> dict:
+    _init_session_state(session_id)
+    return session_store[session_id]
+
 class SessionManager:
     @staticmethod
     def create_session():
         session_id = str(uuid.uuid4())[:8]
-        session_store[session_id] = {
-            "participants": [],
-            "annotations": [],
-            "transcripts": []
-        }
+        _init_session_state(session_id)
         return session_id
 
     @staticmethod
     def add_participant(session_id: str, email: str):
-        if session_id not in session_store:
-            return False
-        if email not in session_store[session_id]["participants"]:
-            session_store[session_id]["participants"].append(email)
+        state = _get_session_state(session_id)
+        if email not in state["participants"]:
+            state["participants"].append(email)
         return True
 
     @staticmethod
@@ -107,6 +151,7 @@ async def finalize_session(session_id: str):
 @router.websocket("/ws/{session_id}")
 async def websocket_endpoint(websocket: WebSocket, session_id: str):
     await manager.connect(session_id, websocket)
+    state = _get_session_state(session_id)
     try:
         while True:
             data = await websocket.receive_json()
@@ -116,20 +161,124 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
             if msg_type == "join":
                 email = data.get("email")
                 SessionManager.add_participant(session_id, email)
+                state["socket_users"][str(id(websocket))] = email
                 # Broadcast participant update
                 await manager.broadcast(session_id, {
                     "type": "participant_update",
-                    "count": len(session_store[session_id]["participants"]),
-                    "participants": session_store[session_id]["participants"]
+                    "count": len(state["participants"]),
+                    "participants": state["participants"]
                 })
                 
             elif msg_type == "annotation_add":
                 annotation = data.get("data")
                 SessionManager.add_annotation(session_id, annotation)
                 await manager.broadcast(session_id, data, exclude_socket=websocket)
+
+            elif msg_type == "annotation_delete":
+                ann_id = data.get("id")
+                if ann_id:
+                    state["annotations"] = [a for a in state["annotations"] if a.get("id") != ann_id]
+                await manager.broadcast(session_id, data, exclude_socket=websocket)
+
+            elif msg_type == "annotation_clear":
+                state["annotations"] = []
+                await manager.broadcast(session_id, data, exclude_socket=websocket)
                 
             elif msg_type == "camera_sync":
-                # Forward camera transform to others
+                # Store and forward camera transform to others
+                state["camera"] = {
+                    "position": data.get("position"),
+                    "target": data.get("target"),
+                    "rig_position": data.get("rig_position"),
+                    "is_vr": bool(data.get("is_vr", False)),
+                    "updated_at": datetime.now().isoformat()
+                }
+                await manager.broadcast(session_id, data, exclude_socket=websocket)
+
+            elif msg_type == "ruler_tab":
+                state["ruler"]["tab"] = data.get("tab", state["ruler"]["tab"])
+                state["ruler"]["updated_at"] = datetime.now().isoformat()
+                await manager.broadcast(session_id, data, exclude_socket=websocket)
+
+            elif msg_type == "ruler_point":
+                point = data.get("point")
+                point_geo = data.get("point_geo")
+                if point:
+                    state["ruler"]["points"].append({
+                        "point": point,
+                        "point_geo": point_geo
+                    })
+                    state["ruler"]["updated_at"] = datetime.now().isoformat()
+                await manager.broadcast(session_id, data, exclude_socket=websocket)
+
+            elif msg_type == "ruler_clear":
+                state["ruler"]["points"] = []
+                state["ruler"]["updated_at"] = datetime.now().isoformat()
+                await manager.broadcast(session_id, data, exclude_socket=websocket)
+
+            elif msg_type == "survey_point":
+                point = data.get("point")
+                if point:
+                    state["survey"]["points"].append(point)
+                    state["survey"]["updated_at"] = datetime.now().isoformat()
+                await manager.broadcast(session_id, data, exclude_socket=websocket)
+
+            elif msg_type == "survey_state":
+                state["survey"]["is_drawing"] = bool(data.get("is_drawing"))
+                if "spacing" in data:
+                    state["survey"]["spacing"] = float(data.get("spacing") or 0)
+                if "rotation" in data:
+                    state["survey"]["rotation"] = float(data.get("rotation") or 0)
+                state["survey"]["updated_at"] = datetime.now().isoformat()
+                await manager.broadcast(session_id, data, exclude_socket=websocket)
+
+            elif msg_type == "survey_clear":
+                state["survey"]["points"] = []
+                state["survey"]["generated"] = False
+                state["survey"]["updated_at"] = datetime.now().isoformat()
+                await manager.broadcast(session_id, data, exclude_socket=websocket)
+
+            elif msg_type == "survey_generate":
+                points = data.get("points") or []
+                state["survey"]["points"] = points
+                state["survey"]["spacing"] = float(data.get("spacing") or 0)
+                state["survey"]["rotation"] = float(data.get("rotation") or 0)
+                state["survey"]["generated"] = True
+                state["survey"]["updated_at"] = datetime.now().isoformat()
+                await manager.broadcast(session_id, data, exclude_socket=websocket)
+
+            elif msg_type == "depth_state":
+                state["depth"] = {
+                    "slice_active": bool(data.get("slice_active")),
+                    "slice2d_active": bool(data.get("slice2d_active")),
+                    "depth_value": data.get("depth_value"),
+                    "updated_at": datetime.now().isoformat()
+                }
+                await manager.broadcast(session_id, data, exclude_socket=websocket)
+
+            elif msg_type == "draw_stroke":
+                stroke = data.get("data")
+                if stroke:
+                    state["draw"]["ops"].append(stroke)
+                    # Keep bounded history to avoid unbounded memory growth.
+                    if len(state["draw"]["ops"]) > 5000:
+                        state["draw"]["ops"] = state["draw"]["ops"][-5000:]
+                    state["draw"]["updated_at"] = datetime.now().isoformat()
+                await manager.broadcast(session_id, data, exclude_socket=websocket)
+
+            elif msg_type == "draw_clear":
+                state["draw"]["ops"] = []
+                state["draw"]["updated_at"] = datetime.now().isoformat()
+                await manager.broadcast(session_id, data, exclude_socket=websocket)
+
+            elif msg_type == "model_transform":
+                state["model"] = {
+                    "link_all": bool(data.get("link_all")),
+                    "active_grid_index": data.get("active_grid_index"),
+                    "main": data.get("main") or {},
+                    "grids": data.get("grids") or {},
+                    "updated_at": datetime.now().isoformat()
+                }
                 await manager.broadcast(session_id, data, exclude_socket=websocket)
 
             elif msg_type == "transcript":
@@ -140,10 +289,79 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
             elif msg_type == "signal":
                 await manager.broadcast(session_id, data, exclude_socket=websocket)
 
+            elif msg_type == "lock_acquire":
+                resource_id = data.get("resource_id")
+                owner = data.get("owner")
+                request_id = data.get("request_id")
+                if resource_id and owner:
+                    existing = state["locks"].get(resource_id)
+                    if not existing or existing.get("owner") == owner:
+                        state["locks"][resource_id] = {
+                            "owner": owner,
+                            "updated_at": datetime.now().isoformat()
+                        }
+                        await websocket.send_json({
+                            "type": "lock_granted",
+                            "resource_id": resource_id,
+                            "owner": owner,
+                            "request_id": request_id
+                        })
+                    else:
+                        await websocket.send_json({
+                            "type": "lock_denied",
+                            "resource_id": resource_id,
+                            "owner": existing.get("owner"),
+                            "request_id": request_id
+                        })
+
+            elif msg_type == "lock_release":
+                resource_id = data.get("resource_id")
+                owner = data.get("owner")
+                if resource_id and owner:
+                    existing = state["locks"].get(resource_id)
+                    if existing and existing.get("owner") == owner:
+                        state["locks"].pop(resource_id, None)
+                        await manager.broadcast(session_id, {
+                            "type": "lock_released",
+                            "resource_id": resource_id,
+                            "owner": owner
+                        })
+
             elif msg_type == "sync_request":
-                 # Send current state to requester (optional, for late joiners)
-                 pass
+                 # Send current state to requester (for late joiners)
+                 await websocket.send_json({
+                     "type": "sync_state",
+                     "state": {
+                         "annotations": state.get("annotations", []),
+                         "ruler": state.get("ruler", {}),
+                         "survey": state.get("survey", {}),
+                         "depth": state.get("depth", {}),
+                         "draw": state.get("draw", {}),
+                         "camera": state.get("camera", {}),
+                         "model": state.get("model", {}),
+                         "participants": state.get("participants", [])
+                     }
+                 })
 
     except WebSocketDisconnect:
         manager.disconnect(session_id, websocket)
-        # Handle cleanup or notify others if necessary
+        # Release locks owned by this user
+        owner = state.get("socket_users", {}).pop(str(id(websocket)), None)
+        if owner:
+            to_release = [k for k, v in state.get("locks", {}).items() if v.get("owner") == owner]
+            for key in to_release:
+                state["locks"].pop(key, None)
+            if to_release:
+                await manager.broadcast(session_id, {
+                    "type": "locks_released",
+                    "owner": owner,
+                    "resources": to_release
+                })
+        # Remove participant and notify
+        if owner and owner in state.get("participants", []):
+            state["participants"] = [p for p in state["participants"] if p != owner]
+            await manager.broadcast(session_id, {
+                "type": "participant_update",
+                "count": len(state["participants"]),
+                "participants": state["participants"]
+            })

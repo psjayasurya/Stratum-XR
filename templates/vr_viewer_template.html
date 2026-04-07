@@ -79,6 +79,45 @@
             height: 100vh;
         }
 
+        #draw-overlay-canvas {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 120;
+            pointer-events: none;
+            touch-action: none;
+        }
+
+        #draw-overlay-canvas.active {
+            pointer-events: auto;
+            cursor: crosshair;
+        }
+
+        .draw-tool-row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .draw-mode-btn {
+            flex: 1;
+            height: 34px;
+            border: 1px solid var(--border-glass);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.08);
+            color: var(--text-main);
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .draw-mode-btn.active {
+            background: rgba(59, 130, 246, 0.25);
+            border-color: rgba(59, 130, 246, 0.7);
+            color: #93c5fd;
+        }
+
         /* ====== TOP HEADER BAR (like index.html) ====== */
         .vr-header {
             position: fixed;
@@ -1622,6 +1661,7 @@
         <button class="vr-tab-btn" onclick="switchVRTab('ruler')"><i class="fas fa-ruler-combined"></i>Ruler</button>
         <button class="vr-tab-btn" id="annotations-tab-btn" onclick="switchVRTab('annotations')"><i
                 class="fas fa-sticky-note"></i>Annotations</button>
+        <button class="vr-tab-btn" onclick="switchVRTab('draw')"><i class="fas fa-pen"></i>Draw</button>
         <button class="vr-tab-btn" onclick="switchVRTab('collab')"><i class="fas fa-users"></i>Collaboration</button>
         <button class="vr-tab-btn" onclick="switchVRTab('about')"><i class="fas fa-info-circle"></i>Info</button>
     </div>
@@ -3097,7 +3137,41 @@
         </div>
     </div>
 
-    <!-- ====== TAB 6: INFO MODAL ====== -->
+    <!-- ====== TAB 6: DRAW MODAL ====== -->
+    <div id="vr-modal-draw" class="vr-tab-content">
+        <button class="vr-close-modal-btn" onclick="closeVRModal(this)"><i class="fas fa-times"></i></button>
+        <h2 class="vr-modal-title"><i class="fas fa-pen"></i> Drawing Tool</h2>
+
+        <div class="control-group" style="padding: 14px;">
+            <div class="toggle-container" style="margin-bottom: 12px;">
+                <input type="checkbox" id="draw-tool-enable" onchange="setDrawToolEnabled(this.checked)">
+                <label for="draw-tool-enable">Enable Drawing Overlay</label>
+            </div>
+
+            <div class="draw-tool-row">
+                <button id="draw-mode-pen" class="draw-mode-btn active" onclick="setDrawMode('pen')"><i class="fas fa-pen"></i> Pen</button>
+                <button id="draw-mode-eraser" class="draw-mode-btn" onclick="setDrawMode('eraser')"><i class="fas fa-eraser"></i> Eraser</button>
+            </div>
+
+            <div class="slider-container" style="margin-bottom: 12px;">
+                <div class="slider-label"><span>Brush Size:</span><span id="draw-size-value">6</span></div>
+                <input type="range" id="draw-size-slider" min="1" max="50" step="1" value="6" oninput="setDrawBrushSize(this.value)">
+            </div>
+
+            <div class="slider-container" style="margin-bottom: 12px;">
+                <div class="slider-label"><span>Brush Color:</span><span id="draw-color-value">#ff4d4f</span></div>
+                <input type="color" id="draw-color-picker" value="#ff4d4f" onchange="setDrawBrushColor(this.value)"
+                    style="width: 100%; height: 34px; border: 1px solid var(--border-glass); border-radius: 8px; background: transparent; cursor: pointer;">
+            </div>
+
+            <div class="draw-tool-row" style="margin-bottom: 0;">
+                <button class="btn-small" onclick="clearDrawOverlay()" style="background: #ef4444; color: #fff; height: 34px; flex: 1;"><i class="fas fa-trash"></i> Clear</button>
+                <button class="btn-small" onclick="setDrawToolEnabled(false)" style="height: 34px; flex: 1;"><i class="fas fa-check"></i> Done</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ====== TAB 7: INFO MODAL ====== -->
     <div id="vr-modal-about" class="vr-tab-content">
         <button class="vr-close-modal-btn" onclick="closeVRModal(this)"><i class="fas fa-times"></i></button>
         <h2 class="vr-modal-title"><i class="fas fa-info-circle"></i> File Info & Instructions</h2>
@@ -3479,7 +3553,9 @@
         </div>
     </div>
 
-    <div id="container"></div>
+    <div id="container">
+        <canvas id="draw-overlay-canvas"></canvas>
+    </div>
 
     <!-- Nav Controls Overlay (Google Earth style) -->
     <div id="nav-controls-overlay">
@@ -3667,6 +3743,344 @@
         let isInCall = false;
         let peerConnection = null;
         let localStream = null;
+        let lastCameraSync = 0;
+        let collabPendingLocks = {};
+        let lastModelSyncTs = 0;
+        let lastModelSyncSignature = '';
+        let collabCanAutoModelSyncAt = 0;
+        const COLLAB_SYNC_MODEL_TRANSFORM = false;
+        let collabApplying = {
+            annotation: false,
+            ruler: false,
+            survey: false,
+            depth: false,
+            draw: false,
+            camera: false,
+            model: false
+        };
+        let collabPendingState = {
+            annotations: [],
+            annotationDeletes: [],
+            annotationClear: false,
+            rulerTab: null,
+            rulerPoints: [],
+            rulerClear: false,
+            surveyPoints: [],
+            surveyState: null,
+            surveyClear: false,
+            surveyGenerate: null,
+            depthState: null,
+            drawOps: [],
+            drawClear: false,
+            cameraState: null,
+            modelState: null
+        };
+
+        function isModelSyncReady() {
+            return Boolean(
+                gridsGroup &&
+                Array.isArray(projectGrids) &&
+                projectGrids.length > 0 &&
+                mainGroup
+            );
+        }
+
+        function isCollabActive() {
+            return Boolean(collaborationWS && collaborationWS.readyState === WebSocket.OPEN && currentSessionId);
+        }
+
+        function sendCollabMessage(payload) {
+            if (!isCollabActive()) return;
+            collaborationWS.send(JSON.stringify(payload));
+        }
+
+        function renderDrawSegment(segment, shouldBroadcast = false) {
+            initDrawOverlay();
+            if (!drawState.canvas || !drawState.ctx || !segment) {
+                if (segment) collabPendingState.drawOps.push(segment);
+                return;
+            }
+
+            const canvas = drawState.canvas;
+            const ctx = drawState.ctx;
+            const width = Math.max(1, canvas.clientWidth || canvas.width);
+            const height = Math.max(1, canvas.clientHeight || canvas.height);
+
+            const x1 = typeof segment.nx1 === 'number' ? segment.nx1 * width : segment.x1;
+            const y1 = typeof segment.ny1 === 'number' ? segment.ny1 * height : segment.y1;
+            const x2 = typeof segment.nx2 === 'number' ? segment.nx2 * width : segment.x2;
+            const y2 = typeof segment.ny2 === 'number' ? segment.ny2 * height : segment.y2;
+            const mode = segment.mode === 'eraser' ? 'eraser' : 'pen';
+            const size = Math.max(1, Math.min(50, Number(segment.size) || drawState.size || 6));
+            const color = segment.color || drawState.color || '#ff4d4f';
+
+            if (![x1, y1, x2, y2].every(v => Number.isFinite(v))) return;
+
+            ctx.save();
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.lineWidth = size;
+            if (mode === 'eraser') {
+                ctx.globalCompositeOperation = 'destination-out';
+                ctx.strokeStyle = 'rgba(0,0,0,1)';
+            } else {
+                ctx.globalCompositeOperation = 'source-over';
+                ctx.strokeStyle = color;
+            }
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+            ctx.restore();
+
+            if (shouldBroadcast && isCollabActive() && !collabApplying.draw) {
+                sendCollabMessage({
+                    type: 'draw_stroke',
+                    data: {
+                        nx1: x1 / width,
+                        ny1: y1 / height,
+                        nx2: x2 / width,
+                        ny2: y2 / height,
+                        size,
+                        color,
+                        mode
+                    }
+                });
+            }
+        }
+
+        function applyRemoteDrawStroke(data) {
+            if (!data || !data.data) return;
+            collabApplying.draw = true;
+            renderDrawSegment(data.data, false);
+            collabApplying.draw = false;
+        }
+
+        function maybeSyncCameraState() {
+            if (!isCollabActive() || collabApplying.camera) return;
+            const now = Date.now();
+            if (now - lastCameraSync <= 150) return;
+            lastCameraSync = now;
+
+            let camPos = null;
+            let camTarget = null;
+            const isInVr = Boolean(renderer && renderer.xr && renderer.xr.isPresenting);
+
+            if (isInVr) {
+                const xrCam = renderer.xr.getCamera();
+                if (xrCam) {
+                    const worldPos = new THREE.Vector3();
+                    const worldDir = new THREE.Vector3();
+                    xrCam.getWorldPosition(worldPos);
+                    xrCam.getWorldDirection(worldDir);
+                    camPos = { x: worldPos.x, y: worldPos.y, z: worldPos.z };
+                    camTarget = {
+                        x: worldPos.x + worldDir.x * 5,
+                        y: worldPos.y + worldDir.y * 5,
+                        z: worldPos.z + worldDir.z * 5
+                    };
+                }
+            }
+
+            if (!camPos || !camTarget) {
+                camPos = { x: camera.position.x, y: camera.position.y, z: camera.position.z };
+                camTarget = { x: controls.target.x, y: controls.target.y, z: controls.target.z };
+            }
+
+            sendCollabMessage({
+                type: 'camera_sync',
+                position: camPos,
+                target: camTarget,
+                rig_position: cameraRig ? { x: cameraRig.position.x, y: cameraRig.position.y, z: cameraRig.position.z } : null,
+                is_vr: isInVr
+            });
+        }
+
+        function applyRemoteCameraState(data) {
+            if (!data || !data.position || !data.target) return;
+            collabApplying.camera = true;
+
+            const isInVr = Boolean(renderer && renderer.xr && renderer.xr.isPresenting);
+            if (isInVr && cameraRig && renderer && renderer.xr) {
+                const xrCam = renderer.xr.getCamera();
+                const curWorldPos = new THREE.Vector3();
+                xrCam.getWorldPosition(curWorldPos);
+
+                const desiredPos = new THREE.Vector3(data.position.x, data.position.y, data.position.z);
+                const delta = desiredPos.sub(curWorldPos);
+                cameraRig.position.add(delta);
+
+                if (data.rig_position) {
+                    cameraRig.position.set(data.rig_position.x, data.rig_position.y, data.rig_position.z);
+                }
+            } else {
+                camera.position.set(data.position.x, data.position.y, data.position.z);
+            }
+
+            controls.target.set(data.target.x, data.target.y, data.target.z);
+            controls.update();
+            collabApplying.camera = false;
+        }
+
+        function emitModelTransform() {
+            if (!COLLAB_SYNC_MODEL_TRANSFORM) return;
+            if (!isCollabActive() || collabApplying.model) return;
+            const mainPos = mainGroup ? { x: mainGroup.position.x, y: mainGroup.position.y, z: mainGroup.position.z } : null;
+            const gridsPos = gridsGroup ? { x: gridsGroup.position.x, y: gridsGroup.position.y, z: gridsGroup.position.z } : null;
+            sendCollabMessage({
+                type: 'model_transform',
+                link_all: Boolean(window.linkAllGrids),
+                active_grid_index: Number.isInteger(window.activeGridIndex) ? window.activeGridIndex : 0,
+                main: {
+                    pos: mainPos,
+                    scale: mainGroup ? mainGroup.scale.x : null,
+                    rot_deg: mainGroup ? (-(mainGroup.rotation.z * 180 / Math.PI)) : null
+                },
+                grids: {
+                    pos: gridsPos,
+                    scale: gridsGroup ? gridsGroup.scale.x : null,
+                    rot_deg: gridsGroup ? (-(gridsGroup.rotation.z * 180 / Math.PI)) : null
+                }
+            });
+        }
+
+        function maybeSyncModelTransform() {
+            if (!COLLAB_SYNC_MODEL_TRANSFORM) return;
+            if (!isCollabActive() || collabApplying.model || !mainGroup || !gridsGroup) return;
+            const now = Date.now();
+            if (now < collabCanAutoModelSyncAt) return;
+            if (now - lastModelSyncTs < 180) return;
+
+            const sig = [
+                window.linkAllGrids ? 1 : 0,
+                Number.isInteger(window.activeGridIndex) ? window.activeGridIndex : 0,
+                mainGroup.position.x.toFixed(3), mainGroup.position.y.toFixed(3), mainGroup.position.z.toFixed(3),
+                mainGroup.scale.x.toFixed(4),
+                mainGroup.rotation.z.toFixed(4),
+                gridsGroup.position.x.toFixed(3), gridsGroup.position.y.toFixed(3), gridsGroup.position.z.toFixed(3),
+                gridsGroup.scale.x.toFixed(4),
+                gridsGroup.rotation.z.toFixed(4)
+            ].join('|');
+
+            if (sig !== lastModelSyncSignature) {
+                lastModelSyncSignature = sig;
+                lastModelSyncTs = now;
+                emitModelTransform();
+            }
+        }
+
+        function applyModelTransform(data) {
+            if (!COLLAB_SYNC_MODEL_TRANSFORM) return;
+            if (!data) return;
+            if (!isModelSyncReady()) {
+                collabPendingState.modelState = data;
+                return;
+            }
+            collabApplying.model = true;
+            const linkAll = Boolean(data.link_all);
+            const incomingActiveIndex = Number.isInteger(data.active_grid_index) ? data.active_grid_index : null;
+            const linkEl = document.getElementById('linkAllGrids');
+            if (linkEl) linkEl.checked = linkAll;
+            window.linkAllGrids = linkAll;
+
+            if (
+                incomingActiveIndex !== null &&
+                Array.isArray(projectGrids) &&
+                projectGrids[incomingActiveIndex] &&
+                typeof window.setActiveGrid === 'function' &&
+                window.activeGridIndex !== incomingActiveIndex
+            ) {
+                window.setActiveGrid(incomingActiveIndex);
+            }
+
+            const targetMainGroup = (
+                incomingActiveIndex !== null &&
+                Array.isArray(projectGrids) &&
+                projectGrids[incomingActiveIndex]
+            ) ? projectGrids[incomingActiveIndex].group : mainGroup;
+
+            const applyTarget = (target, payload) => {
+                if (!target || !payload) return;
+                if (payload.pos) {
+                    target.position.set(payload.pos.x, payload.pos.y, payload.pos.z);
+                }
+                if (typeof payload.scale === 'number') {
+                    target.scale.setScalar(payload.scale);
+                }
+                if (typeof payload.rot_deg === 'number') {
+                    target.rotation.z = -payload.rot_deg * Math.PI / 180;
+                }
+            };
+
+            applyTarget(targetMainGroup, data.main);
+            applyTarget(gridsGroup, data.grids);
+
+            const scaleSlider = document.getElementById('scaleSlider');
+            const rotationSlider = document.getElementById('rotationSlider');
+            const posXSlider = document.getElementById('posXSlider');
+            const posYSlider = document.getElementById('posYSlider');
+            const posZSlider = document.getElementById('posZSlider');
+            const target = window.linkAllGrids ? gridsGroup : targetMainGroup;
+
+            if (scaleSlider && target) {
+                scaleSlider.value = String(target.scale.x);
+                const scaleVal = document.getElementById('scaleValue');
+                if (scaleVal) scaleVal.textContent = target.scale.x.toFixed(2);
+            }
+            if (rotationSlider && target) {
+                let deg = -(target.rotation.z * 180 / Math.PI);
+                while (deg < 0) deg += 360;
+                while (deg >= 360) deg -= 360;
+                rotationSlider.value = String(Math.round(deg));
+                const rotVal = document.getElementById('rotationValue');
+                if (rotVal) rotVal.textContent = Math.round(deg);
+            }
+            if (posXSlider && target) {
+                posXSlider.value = String(target.position.x);
+                const el = document.getElementById('posXValue');
+                if (el) el.textContent = target.position.x.toFixed(1);
+            }
+            if (posYSlider && target) {
+                posYSlider.value = String(target.position.y);
+                const el = document.getElementById('posYValue');
+                if (el) el.textContent = target.position.y.toFixed(1);
+            }
+            if (posZSlider && target) {
+                posZSlider.value = String(target.position.z);
+                const el = document.getElementById('posZValue');
+                if (el) el.textContent = target.position.z.toFixed(1);
+            }
+
+            collabApplying.model = false;
+        }
+
+        function requestCollabLock(resourceId) {
+            if (!isCollabActive()) return Promise.resolve(true);
+            const requestId = `${resourceId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+            return new Promise(resolve => {
+                collabPendingLocks[requestId] = resolve;
+                sendCollabMessage({
+                    type: 'lock_acquire',
+                    resource_id: resourceId,
+                    owner: userEmail,
+                    request_id: requestId
+                });
+                setTimeout(() => {
+                    if (collabPendingLocks[requestId]) {
+                        delete collabPendingLocks[requestId];
+                        resolve(false);
+                    }
+                }, 1500);
+            });
+        }
+
+        function releaseCollabLock(resourceId) {
+            sendCollabMessage({
+                type: 'lock_release',
+                resource_id: resourceId,
+                owner: userEmail
+            });
+        }
 
         // Get user email from cookie or URL params
         function getUserEmail() {
@@ -3787,11 +4201,15 @@
 
             collaborationWS.onopen = () => {
                 console.log('WebSocket connected to session:', sessionId);
+                // Prevent first-frame local transforms from overwriting shared state while initial sync is in-flight.
+                collabCanAutoModelSyncAt = Date.now() + 2000;
                 // Send join message
                 collaborationWS.send(JSON.stringify({
                     type: 'join',
                     email: userEmail
                 }));
+                // Request sync state for late joiners
+                sendCollabMessage({ type: 'sync_request' });
             };
 
             collaborationWS.onmessage = (event) => {
@@ -3817,12 +4235,130 @@
                     break;
 
                 case 'camera_sync':
-                    // Sync camera position from other users (optional feature)
+                    applyRemoteCameraState(data);
                     break;
 
+
                 case 'annotation_add':
-                    // Handle remote annotations (can be extended)
-                    console.log('Remote annotation:', data.data);
+                    if (window.annMgr) {
+                        collabApplying.annotation = true;
+                        window.annMgr.addRemoteAnnotation(data.data);
+                        collabApplying.annotation = false;
+                    } else {
+                        collabPendingState.annotations.push(data.data);
+                    }
+                    break;
+
+                case 'annotation_delete':
+                    if (window.annMgr) {
+                        window.annMgr.removeAnnotationLocal(data.id);
+                    } else {
+                        collabPendingState.annotationDeletes.push(data.id);
+                    }
+                    break;
+
+                case 'annotation_clear':
+                    if (window.annMgr) {
+                        window.annMgr.clearAllLocal();
+                    } else {
+                        collabPendingState.annotationClear = true;
+                    }
+                    break;
+
+                case 'ruler_tab':
+                    if (data.tab) {
+                        collabApplying.ruler = true;
+                        window.switchRulerTab(data.tab);
+                        collabApplying.ruler = false;
+                    }
+                    break;
+
+                case 'ruler_point':
+                    if (data.point || data.point_geo) {
+                        collabApplying.ruler = true;
+                        applyRemoteRulerPoint(data);
+                        collabApplying.ruler = false;
+                    }
+                    break;
+
+                case 'ruler_clear':
+                    collabApplying.ruler = true;
+                    window.clearRulerMeasurement();
+                    collabApplying.ruler = false;
+                    break;
+
+                case 'survey_point':
+                    if (data.point) {
+                        collabApplying.survey = true;
+                        applyRemoteSurveyPoint(data.point);
+                        collabApplying.survey = false;
+                    }
+                    break;
+
+                case 'survey_state':
+                    collabApplying.survey = true;
+                    applyRemoteSurveyState(data);
+                    collabApplying.survey = false;
+                    break;
+
+                case 'survey_clear':
+                    collabApplying.survey = true;
+                    window.clearSurveyGrid();
+                    collabApplying.survey = false;
+                    break;
+
+                case 'survey_generate':
+                    collabApplying.survey = true;
+                    applyRemoteSurveyGenerate(data);
+                    collabApplying.survey = false;
+                    break;
+
+                case 'depth_state':
+                    collabApplying.depth = true;
+                    applyRemoteDepthState(data);
+                    collabApplying.depth = false;
+                    break;
+
+                case 'draw_stroke':
+                    applyRemoteDrawStroke(data);
+                    break;
+
+                case 'draw_clear':
+                    collabApplying.draw = true;
+                    if (drawState.canvas && drawState.ctx) {
+                        window.clearDrawOverlay(false);
+                    } else {
+                        collabPendingState.drawClear = true;
+                    }
+                    collabApplying.draw = false;
+                    break;
+
+                case 'model_transform':
+                    if (COLLAB_SYNC_MODEL_TRANSFORM) {
+                        applyModelTransform(data);
+                    }
+                    break;
+
+                case 'sync_state':
+                    applySyncState(data.state);
+                    break;
+
+                case 'lock_granted':
+                case 'lock_denied': {
+                    const requestId = data.request_id;
+                    if (requestId && collabPendingLocks[requestId]) {
+                        collabPendingLocks[requestId](data.type === 'lock_granted');
+                        delete collabPendingLocks[requestId];
+                    }
+                    break;
+                }
+
+                case 'lock_released':
+                    // Optional: update UI indicators
+                    break;
+
+                case 'locks_released':
+                    // Optional: update UI indicators for owner disconnect
                     break;
 
                 case 'transcript':
@@ -4396,6 +4932,10 @@
             const modal = triggerEl?.closest('.vr-tab-content');
             if (!modal || modal.id === 'vr-modal-ruler') return;
 
+            if (modal.id === 'vr-modal-draw') {
+                setDrawToolEnabled(false);
+            }
+
             modal.classList.remove('active');
 
             const tabId = modal.id.replace('vr-modal-', '');
@@ -4404,6 +4944,157 @@
             const anyOpen = document.querySelector('.vr-tab-content.active:not(#vr-modal-ruler)');
             const backdrop = document.getElementById('vrModalBackdrop');
             if (!anyOpen && backdrop) backdrop.classList.remove('active');
+        };
+
+        const drawState = {
+            enabled: false,
+            mode: 'pen',
+            color: '#ff4d4f',
+            size: 6,
+            drawing: false,
+            lastX: 0,
+            lastY: 0,
+            ctx: null,
+            canvas: null
+        };
+
+        function resizeDrawOverlay() {
+            if (!drawState.canvas || !drawState.ctx) return;
+            const canvas = drawState.canvas;
+            const container = document.getElementById('container');
+            if (!container) return;
+
+            const dpr = window.devicePixelRatio || 1;
+            const width = Math.max(1, Math.floor(container.clientWidth * dpr));
+            const height = Math.max(1, Math.floor(container.clientHeight * dpr));
+
+            if (canvas.width === width && canvas.height === height) return;
+
+            const snapshot = document.createElement('canvas');
+            snapshot.width = canvas.width || width;
+            snapshot.height = canvas.height || height;
+            const snapCtx = snapshot.getContext('2d');
+            if (snapCtx && canvas.width > 0 && canvas.height > 0) {
+                snapCtx.drawImage(canvas, 0, 0);
+            }
+
+            canvas.width = width;
+            canvas.height = height;
+            drawState.ctx.setTransform(1, 0, 0, 1, 0, 0);
+            drawState.ctx.scale(dpr, dpr);
+            drawState.ctx.drawImage(snapshot, 0, 0, container.clientWidth, container.clientHeight);
+        }
+
+        function initDrawOverlay() {
+            if (drawState.canvas) return;
+            const canvas = document.getElementById('draw-overlay-canvas');
+            if (!canvas) return;
+
+            drawState.canvas = canvas;
+            drawState.ctx = canvas.getContext('2d', { alpha: true });
+            resizeDrawOverlay();
+
+            const startDrawing = (event) => {
+                if (!drawState.enabled) return;
+                event.preventDefault();
+                if (typeof event.button === 'number' && event.button !== 0) return;
+
+                const rect = canvas.getBoundingClientRect();
+                drawState.drawing = true;
+                drawState.lastX = event.clientX - rect.left;
+                drawState.lastY = event.clientY - rect.top;
+                if (event.pointerId != null) {
+                    canvas.setPointerCapture(event.pointerId);
+                }
+            };
+
+            const drawMove = (event) => {
+                if (!drawState.enabled || !drawState.drawing || !drawState.ctx) return;
+                event.preventDefault();
+
+                const rect = canvas.getBoundingClientRect();
+                const x = event.clientX - rect.left;
+                const y = event.clientY - rect.top;
+                renderDrawSegment({
+                    x1: drawState.lastX,
+                    y1: drawState.lastY,
+                    x2: x,
+                    y2: y,
+                    size: drawState.size,
+                    color: drawState.color,
+                    mode: drawState.mode
+                }, true);
+
+                drawState.lastX = x;
+                drawState.lastY = y;
+            };
+
+            const stopDrawing = (event) => {
+                if (!drawState.drawing) return;
+                drawState.drawing = false;
+                if (event && event.pointerId != null) {
+                    try { canvas.releasePointerCapture(event.pointerId); } catch (e) {}
+                }
+            };
+
+            canvas.addEventListener('pointerdown', startDrawing);
+            canvas.addEventListener('pointermove', drawMove);
+            canvas.addEventListener('pointerup', stopDrawing);
+            canvas.addEventListener('pointercancel', stopDrawing);
+            canvas.addEventListener('pointerleave', stopDrawing);
+            window.addEventListener('resize', resizeDrawOverlay);
+        }
+
+        window.setDrawToolEnabled = function (enabled) {
+            initDrawOverlay();
+            drawState.enabled = Boolean(enabled);
+            const canvas = drawState.canvas;
+            const checkbox = document.getElementById('draw-tool-enable');
+            if (checkbox) checkbox.checked = drawState.enabled;
+
+            if (canvas) {
+                canvas.classList.toggle('active', drawState.enabled);
+            }
+
+            if (drawState.enabled) {
+                if (!window.isRulerActive) {
+                    controls.enabled = false;
+                }
+            } else {
+                if (!window.isRulerActive) {
+                    controls.enabled = true;
+                }
+                drawState.drawing = false;
+            }
+        };
+
+        window.setDrawMode = function (mode) {
+            drawState.mode = mode === 'eraser' ? 'eraser' : 'pen';
+            const penBtn = document.getElementById('draw-mode-pen');
+            const eraserBtn = document.getElementById('draw-mode-eraser');
+            if (penBtn) penBtn.classList.toggle('active', drawState.mode === 'pen');
+            if (eraserBtn) eraserBtn.classList.toggle('active', drawState.mode === 'eraser');
+        };
+
+        window.setDrawBrushSize = function (value) {
+            const numeric = Math.max(1, Math.min(50, parseInt(value, 10) || 6));
+            drawState.size = numeric;
+            const label = document.getElementById('draw-size-value');
+            if (label) label.textContent = String(numeric);
+        };
+
+        window.setDrawBrushColor = function (color) {
+            drawState.color = color || '#ff4d4f';
+            const label = document.getElementById('draw-color-value');
+            if (label) label.textContent = drawState.color;
+        };
+
+        window.clearDrawOverlay = function (broadcast = true) {
+            if (!drawState.canvas || !drawState.ctx) return;
+            drawState.ctx.clearRect(0, 0, drawState.canvas.width, drawState.canvas.height);
+            if (broadcast && isCollabActive() && !collabApplying.draw) {
+                sendCollabMessage({ type: 'draw_clear' });
+            }
         };
 
         // ===== DRAGGABLE & SCALABLE MODAL INITIALIZATION =====
@@ -4513,6 +5204,7 @@
 
         // Initialize on page load
         document.addEventListener('DOMContentLoaded', initializeModalDragAndScale);
+        document.addEventListener('DOMContentLoaded', initDrawOverlay);
         
         // Also init after a brief delay to ensure DOM is ready
         setTimeout(initializeModalDragAndScale, 100);
@@ -5185,6 +5877,7 @@
         let mainGroup;
         if (projectGrids.length > 0) {
             mainGroup = projectGrids[0].group;
+            window.mainGroup = mainGroup;
             window.pointCloudGroup = projectGrids[0].pcGroup;
             window.surfaceGroup = projectGrids[0].surfGroup;
             window.sliceGroup = projectGrids[0].slGroup;
@@ -5213,6 +5906,7 @@
             const target = projectGrids[index];
             if (!target) return;
 
+            mainGroup = target.group;
             window.mainGroup = target.group;
             window.pointCloudGroup = target.pcGroup;
             window.surfaceGroup = target.surfGroup;
@@ -5321,6 +6015,9 @@
                 pane.style.display = pane.id === `ruler-tab-${tabName}` ? 'block' : 'none';
             });
             window.clearRulerMeasurement();
+            if (!collabApplying.ruler) {
+                sendCollabMessage({ type: 'ruler_tab', tab: tabName });
+            }
         };
 
         window.updateRulerUnits = function (mode, type, unit) {
@@ -5346,6 +6043,9 @@
             const bar = document.getElementById('ruler-instruction-bar');
             if (bar && window.isRulerActive) bar.textContent = '📐 Click on the 3D scene to place measurement points — Right-click to orbit';
             updateExportPanel();
+            if (!collabApplying.ruler) {
+                sendCollabMessage({ type: 'ruler_clear' });
+            }
         };
 
         window.saveRulerMeasurement = function () {
@@ -5370,6 +6070,19 @@
             updateRulerGraphics();
             updateRulerResults();
             updateExportPanel();
+            if (!collabApplying.ruler) {
+                const g = rulerPointToGeo(point);
+                sendCollabMessage({
+                    type: 'ruler_point',
+                    tab: activeRulerTab,
+                    point: { x: point.x, y: point.y, z: point.z },
+                    point_geo: {
+                        latitude: +g.lat.toFixed(8),
+                        longitude: +g.lon.toFixed(8),
+                        altitude_m: +g.alt.toFixed(3)
+                    }
+                });
+            }
         }
 
         function updateRulerGraphics() {
@@ -5528,6 +6241,175 @@
             }
         }
 
+        function applyRemoteRulerPoint(point) {
+            if (!point) return;
+            let p = null;
+            if (point.point_geo) {
+                p = geoToRulerPoint(point.point_geo);
+            } else if (point.point) {
+                p = new THREE.Vector3(point.point.x, point.point.y, point.point.z);
+            } else if (Number.isFinite(point.x) && Number.isFinite(point.y) && Number.isFinite(point.z)) {
+                p = new THREE.Vector3(point.x, point.y, point.z);
+            }
+            if (!p) return;
+            addRulerPoint(p);
+        }
+
+        function applyRemoteSurveyPoint(point) {
+            if (!point) return;
+            const p = new THREE.Vector3(point.x, point.y, point.z);
+            surveyPolygonPoints.push(p);
+            updateSurveyPolygonRender();
+        }
+
+        function applyRemoteSurveyState(data) {
+            if (!data) return;
+            if (typeof data.is_drawing === 'boolean') {
+                isDrawingSurvey = data.is_drawing;
+                const status = document.getElementById('surveyGridDrawStatus');
+                if (status) {
+                    status.textContent = isDrawingSurvey
+                        ? 'Draw mode ON: click or VR trigger to place polygon points. Press Esc or Finish to close polygon.'
+                        : `Polygon drawn with ${surveyPolygonPoints.length} points.`;
+                }
+            }
+            if (typeof data.spacing === 'number') {
+                const spacingSlider = document.getElementById('surveyGridSpacingSlider');
+                if (spacingSlider) {
+                    spacingSlider.value = String(data.spacing);
+                    const display = document.getElementById('surveyGridSpacingDisplay');
+                    if (display) display.textContent = String(data.spacing);
+                }
+            }
+        }
+
+        function applyRemoteSurveyGenerate(data) {
+            if (!data) return;
+            surveyPolygonPoints = (data.points || []).map(p => new THREE.Vector3(p.x, p.y, p.z));
+            updateSurveyPolygonRender();
+            const spacingSlider = document.getElementById('surveyGridSpacingSlider');
+            if (spacingSlider && typeof data.spacing === 'number') {
+                spacingSlider.value = String(data.spacing);
+                const display = document.getElementById('surveyGridSpacingDisplay');
+                if (display) display.textContent = String(data.spacing);
+            }
+            const rotEl = document.getElementById('gridRotationSlider');
+            if (rotEl && typeof data.rotation === 'number') {
+                rotEl.value = String(data.rotation);
+            }
+            window.generateSurveyGrid();
+        }
+
+        function applyRemoteDepthState(data) {
+            if (!data) return;
+            const depthToggle = document.getElementById('depthSliceToggle');
+            const depth2DToggle = document.getElementById('depth2DSliceToggle');
+            const depthSlider = document.getElementById('depthSliceSlider');
+
+            if (depthToggle && typeof data.slice_active === 'boolean') {
+                depthToggle.checked = data.slice_active;
+                window.toggleDepthSlice(depthToggle.checked);
+            }
+            if (depth2DToggle && typeof data.slice2d_active === 'boolean') {
+                depth2DToggle.checked = data.slice2d_active;
+                window.toggle2DSlice(depth2DToggle.checked);
+            }
+            if (depthSlider && data.depth_value != null) {
+                depthSlider.value = String(data.depth_value);
+                window.updateDepthSlice(depthSlider.value);
+            }
+        }
+
+        function applySyncState(state) {
+            if (!state) return;
+
+            // Initial authoritative snapshot is now applied; allow auto model sync.
+            collabCanAutoModelSyncAt = Date.now();
+
+            if (state.annotations && Array.isArray(state.annotations)) {
+                state.annotations.forEach(a => {
+                    if (window.annMgr) window.annMgr.addRemoteAnnotation(a);
+                    else collabPendingState.annotations.push(a);
+                });
+            }
+
+            if (state.ruler) {
+                const tab = state.ruler.tab || 'line';
+                collabApplying.ruler = true;
+                window.switchRulerTab(tab);
+                window.clearRulerMeasurement();
+                (state.ruler.points || []).forEach(p => applyRemoteRulerPoint(p));
+                collabApplying.ruler = false;
+            }
+
+            if (state.survey) {
+                collabApplying.survey = true;
+                surveyPolygonPoints = (state.survey.points || []).map(p => new THREE.Vector3(p.x, p.y, p.z));
+                updateSurveyPolygonRender();
+                applyRemoteSurveyState({
+                    is_drawing: state.survey.is_drawing,
+                    spacing: state.survey.spacing
+                });
+                if (state.survey.generated) {
+                    applyRemoteSurveyGenerate({
+                        points: state.survey.points,
+                        spacing: state.survey.spacing,
+                        rotation: state.survey.rotation
+                    });
+                }
+                collabApplying.survey = false;
+            }
+
+            if (state.depth) {
+                collabApplying.depth = true;
+                applyRemoteDepthState(state.depth);
+                collabApplying.depth = false;
+            }
+
+            if (state.draw && Array.isArray(state.draw.ops)) {
+                collabApplying.draw = true;
+                window.clearDrawOverlay(false);
+                state.draw.ops.forEach(op => renderDrawSegment(op, false));
+                collabApplying.draw = false;
+            }
+
+            if (COLLAB_SYNC_MODEL_TRANSFORM && state.model) {
+                applyModelTransform(state.model);
+            }
+
+            if (state.camera && state.camera.position && state.camera.target) {
+                applyRemoteCameraState(state.camera);
+            }
+        }
+
+        function applyPendingCollabState() {
+            if (window.annMgr) {
+                if (collabPendingState.annotationClear) {
+                    window.annMgr.clearAllLocal();
+                    collabPendingState.annotationClear = false;
+                }
+                collabPendingState.annotations.forEach(a => window.annMgr.addRemoteAnnotation(a));
+                collabPendingState.annotations = [];
+                collabPendingState.annotationDeletes.forEach(id => window.annMgr.removeAnnotationLocal(id));
+                collabPendingState.annotationDeletes = [];
+            }
+
+            if (collabPendingState.drawClear) {
+                window.clearDrawOverlay(false);
+                collabPendingState.drawClear = false;
+            }
+            if (collabPendingState.drawOps.length > 0) {
+                collabPendingState.drawOps.forEach(op => renderDrawSegment(op, false));
+                collabPendingState.drawOps = [];
+            }
+
+            if (COLLAB_SYNC_MODEL_TRANSFORM && collabPendingState.modelState && isModelSyncReady()) {
+                const pendingModel = collabPendingState.modelState;
+                collabPendingState.modelState = null;
+                applyModelTransform(pendingModel);
+            }
+        }
+
         // ===== RULER CLICK HANDLER (click-vs-drag detection) =====
         // Left-click is freed from OrbitControls when ruler is active.
         // We track mousedown position and only register a point if the mouse
@@ -5627,6 +6509,22 @@
             }
             // No geo-ref: use scene coords directly (still useful for relative export)
             return { lat: pt.z, lon: pt.x, alt: pt.y };
+        }
+
+        function geoToRulerPoint(geoPoint) {
+            if (!geoPoint) return null;
+            const origin = (geoOrigin && (geoOrigin.lat !== 0 || geoOrigin.lon !== 0))
+                ? geoOrigin
+                : (typeof mapOrigin !== 'undefined' ? mapOrigin : { lat: 0, lon: 0, alt: 0 });
+
+            const lat = Number(geoPoint.latitude ?? geoPoint.lat);
+            const lon = Number(geoPoint.longitude ?? geoPoint.lon);
+            const alt = Number(geoPoint.altitude_m ?? geoPoint.alt ?? origin.alt ?? 0);
+            if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+
+            const meters = latLonToMeters({ lat, lon }, origin);
+            const y = alt - (origin.alt || 0);
+            return new THREE.Vector3(meters.x, y, meters.z);
         }
 
         // Show/hide the export panel based on whether there are enough points
@@ -8614,6 +9512,15 @@
                 const val = document.getElementById('depthSliceSlider').value;
                 window.update2DSlice(val);
             }
+            if (!collabApplying.depth) {
+                const depthVal = document.getElementById('depthSliceSlider')?.value ?? null;
+                sendCollabMessage({
+                    type: 'depth_state',
+                    slice_active: Boolean(isSliceActive),
+                    slice2d_active: Boolean(is2DSliceActive),
+                    depth_value: depthVal
+                });
+            }
         };
 
         window.update2DSlice = function(val) {
@@ -8750,6 +9657,15 @@
                     });
                 }
             }
+            if (!collabApplying.depth) {
+                const depthVal = document.getElementById('depthSliceSlider')?.value ?? null;
+                sendCollabMessage({
+                    type: 'depth_state',
+                    slice_active: Boolean(isSliceActive),
+                    slice2d_active: Boolean(is2DSliceActive),
+                    depth_value: depthVal
+                });
+            }
         };
 
         window.updateDepthSlice = function (val) {
@@ -8811,6 +9727,14 @@
                     }
                 });
             }
+            if (!collabApplying.depth) {
+                sendCollabMessage({
+                    type: 'depth_state',
+                    slice_active: Boolean(isSliceActive),
+                    slice2d_active: Boolean(is2DSliceActive),
+                    depth_value: depth
+                });
+            }
         };
         document.getElementById('scaleSlider').addEventListener('input', (e) => {
             const val = parseFloat(e.target.value);
@@ -8820,6 +9744,7 @@
             } else {
                 mainGroup.scale.setScalar(val);
             }
+            emitModelTransform();
         });
 
 
@@ -8832,6 +9757,7 @@
             } else {
                 mainGroup.rotation.z = angle;
             }
+            emitModelTransform();
         });
         document.getElementById('showPoints').addEventListener('change', (e) => {
             const visible = e.target.checked;
@@ -8865,6 +9791,7 @@
                 const val = document.getElementById('depthSliceSlider').value;
                 window.updateDepthSlice(val);
             }
+            emitModelTransform();
         });
 
         // --- GPR POSITION SLIDERS ---
@@ -8896,18 +9823,21 @@
             document.getElementById('posXValue').textContent = val.toFixed(1);
             if (window.linkAllGrids) gridsGroup.position.x = val;
             else mainGroup.position.x = val;
+            emitModelTransform();
         });
         document.getElementById('posYSlider').addEventListener('input', (e) => {
             const val = parseFloat(e.target.value);
             document.getElementById('posYValue').textContent = val.toFixed(1);
             if (window.linkAllGrids) gridsGroup.position.y = val;
             else mainGroup.position.y = val;
+            emitModelTransform();
         });
         document.getElementById('posZSlider').addEventListener('input', (e) => {
             const val = parseFloat(e.target.value);
             document.getElementById('posZValue').textContent = val.toFixed(1);
             if (window.linkAllGrids) gridsGroup.position.z = val;
             else mainGroup.position.z = val;
+            emitModelTransform();
         });
         document.getElementById('dragSlider').addEventListener('input', (e) => {
             vrDragMultiplier = parseFloat(e.target.value);
@@ -11854,6 +12784,7 @@
 
                         cameraRig.position.addScaledVector(moveDir, -yVal * speed);
                         cameraRig.position.addScaledVector(rightDir, xVal * speed);
+                        maybeSyncCameraState();
                     }
                 }
 
@@ -11979,6 +12910,7 @@
                         // Height clamping: no lower limit, can go underground; upper cap only
                         const maxHeight = 150; 
                         cameraRig.position.y = Math.min(maxHeight, cameraRig.position.y);
+                        maybeSyncCameraState();
                     }
                 }
 
@@ -12214,6 +13146,9 @@
                 pct = Math.max(0, Math.min(1, pct));
                 zoomThumb.style.top = (pct * rect.height) + 'px';
             }
+            if (isCollabActive() && !collabApplying.camera) {
+                maybeSyncCameraState();
+            }
         });
 
         function applyNavControl() {
@@ -12253,6 +13188,7 @@
         // Render Loop
         renderer.setAnimationLoop(() => {
             const delta = clock.getDelta();
+            maybeSyncModelTransform();
             if (assistantMixer) assistantMixer.update(delta);
             if (assistantModel && assistantModel.visible && assistantAutoFaceViewer) {
                 faceAssistantTowardsCamera();
@@ -13170,10 +14106,78 @@
                     if (data.id) {
                         this.savedList.push({ id: data.id, ann_type: type, label, color, note, positions, object3D: obj3D });
                         this._renderList();
+                        if (!collabApplying.annotation) {
+                            const positionsGeo = positions.map(p => {
+                                const g = this._sceneToGeo(p);
+                                return {
+                                    latitude: +g.lat.toFixed(8),
+                                    longitude: +g.lon.toFixed(8),
+                                    altitude_m: +g.alt.toFixed(3)
+                                };
+                            });
+                            sendCollabMessage({
+                                type: 'annotation_add',
+                                data: {
+                                    id: data.id,
+                                    ann_type: type,
+                                    label,
+                                    color,
+                                    note,
+                                    positions: positions.map(p => ({ x: p.x, y: p.y, z: p.z })),
+                                    positions_geo: positionsGeo,
+                                    metadata: metadata || {}
+                                }
+                            });
+                        }
                     }
                 } catch (e) {
                     console.error('Failed to save annotation:', e);
                 }
+            }
+
+            addRemoteAnnotation(entry) {
+                if (!entry || !entry.id) return;
+                if (this.savedList.find(a => a.id === entry.id)) return;
+
+                let positions = [];
+                if (Array.isArray(entry.positions_geo) && entry.positions_geo.length > 0) {
+                    positions = entry.positions_geo.map(g => this._geoToScene(g)).filter(Boolean);
+                } else if (Array.isArray(entry.positions)) {
+                    positions = entry.positions.map(p => new THREE.Vector3(p.x, p.y, p.z));
+                } else if (typeof entry.positions === 'string') {
+                    try {
+                        positions = JSON.parse(entry.positions).map(p => new THREE.Vector3(p.x, p.y, p.z));
+                    } catch (e) {}
+                }
+
+                let obj3D = null;
+                if (positions.length === 1) {
+                    const p = positions[0];
+                    switch (entry.ann_type) {
+                        case 'pin': obj3D = this._makePin(p, entry.color, entry.label); break;
+                        case 'label': obj3D = this._makeLabel(p, entry.color, entry.label); break;
+                        case 'note': obj3D = this._makeNoteCard(p, entry.color, entry.label, entry.note); break;
+                        case 'sphere': obj3D = this._makeSphere(p, entry.color); break;
+                        case 'hazard': obj3D = this._makeHazard(p, entry.color); break;
+                        case 'flag': obj3D = this._makeFlag(p, entry.color, entry.label); break;
+                        case 'arrow': obj3D = this._makeArrow(p, entry.color); break;
+                        case 'stamp': obj3D = this._makeLabel(p, entry.color, entry.label); break;
+                    }
+                } else if (positions.length > 1) {
+                    if (entry.ann_type === 'line') obj3D = this._makeLineObject(positions, entry.color);
+                    if (entry.ann_type === 'polygon') obj3D = this._makePolygonObject(positions, entry.color);
+                }
+                if (obj3D) this.group.add(obj3D);
+                this.savedList.push({
+                    id: entry.id,
+                    ann_type: entry.ann_type,
+                    label: entry.label,
+                    color: entry.color,
+                    note: entry.note,
+                    positions,
+                    object3D: obj3D
+                });
+                this._renderList();
             }
 
             async loadAnnotations() {
@@ -13217,21 +14221,49 @@
             }
 
             async deleteAnnotation(id) {
+                const lockOk = await requestCollabLock(`annotation:${id}`);
+                if (!lockOk) {
+                    window.notifyUser('This annotation is being edited by another participant.');
+                    return;
+                }
                 const entry = this.savedList.find(a => a.id === id);
                 if (entry && entry.object3D) this.group.remove(entry.object3D);
                 this.savedList = this.savedList.filter(a => a.id !== id);
                 this._renderList();
                 try {
                     await fetch(`/api/annotations/${this._jobId}/${id}`, { method: 'DELETE' });
+                    if (!collabApplying.annotation) {
+                        sendCollabMessage({ type: 'annotation_delete', id });
+                    }
                 } catch (e) {
                     console.error('Failed to delete annotation:', e);
+                } finally {
+                    releaseCollabLock(`annotation:${id}`);
                 }
+            }
+
+            removeAnnotationLocal(id) {
+                const entry = this.savedList.find(a => a.id === id);
+                if (entry && entry.object3D) this.group.remove(entry.object3D);
+                this.savedList = this.savedList.filter(a => a.id !== id);
+                this._renderList();
             }
 
             clearAll() {
                 this.savedList.forEach(a => {
                     if (a.object3D) this.group.remove(a.object3D);
                     fetch(`/api/annotations/${this._jobId}/${a.id}`, { method: 'DELETE' }).catch(() => { });
+                });
+                this.savedList = [];
+                this._renderList();
+                if (!collabApplying.annotation) {
+                    sendCollabMessage({ type: 'annotation_clear' });
+                }
+            }
+
+            clearAllLocal() {
+                this.savedList.forEach(a => {
+                    if (a.object3D) this.group.remove(a.object3D);
                 });
                 this.savedList = [];
                 this._renderList();
@@ -13323,6 +14355,22 @@
                 const alt = (origin.alt || 0) + worldPt.y;
 
                 return { lat, lon, alt };
+            }
+
+            _geoToScene(geoPoint) {
+                if (!geoPoint) return null;
+                const origin = (typeof geoOrigin !== 'undefined' && (geoOrigin.lat !== 0 || geoOrigin.lon !== 0))
+                    ? geoOrigin
+                    : (typeof mapOrigin !== 'undefined' ? mapOrigin : { lat: 0, lon: 0, alt: 0 });
+
+                const lat = Number(geoPoint.latitude ?? geoPoint.lat);
+                const lon = Number(geoPoint.longitude ?? geoPoint.lon);
+                const alt = Number(geoPoint.altitude_m ?? geoPoint.alt ?? origin.alt ?? 0);
+                if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+
+                const meters = latLonToMeters({ lat, lon }, origin);
+                const y = alt - (origin.alt || 0);
+                return new THREE.Vector3(meters.x, y, meters.z);
             }
 
             // ---- Export ----
@@ -13525,6 +14573,9 @@
             
             renderer.domElement.addEventListener('pointerdown', onSurveyDrawClick);
             window.addEventListener('keydown', onSurveyDrawKey);
+            if (!collabApplying.survey) {
+                sendCollabMessage({ type: 'survey_state', is_drawing: true });
+            }
         };
 
         window.finishSurveyGridDraw = function() {
@@ -13534,6 +14585,9 @@
             window.removeEventListener('keydown', onSurveyDrawKey);
             document.getElementById('surveyGridDrawStatus').textContent = `Polygon drawn with ${surveyPolygonPoints.length} points.`;
             updateSurveyPolygonRender();
+            if (!collabApplying.survey) {
+                sendCollabMessage({ type: 'survey_state', is_drawing: false });
+            }
         };
 
         function addSurveyPolygonPoint(hitPoint) {
@@ -13545,6 +14599,12 @@
             const status = document.getElementById('surveyGridDrawStatus');
             if (status) {
                 status.textContent = `Drawing polygon... (${surveyPolygonPoints.length} point${surveyPolygonPoints.length !== 1 ? 's' : ''}) - Esc/Finish to close`;
+            }
+            if (!collabApplying.survey) {
+                sendCollabMessage({
+                    type: 'survey_point',
+                    point: { x: point.x, y: point.y, z: point.z }
+                });
             }
         }
 
@@ -13686,6 +14746,9 @@
 
             surveyGeneratedLengthMeters = 0;
             updateSurveyCostEstimate();
+            if (!collabApplying.survey) {
+                sendCollabMessage({ type: 'survey_clear' });
+            }
         };
 
         window.generateSurveyGrid = function() {
@@ -13850,6 +14913,16 @@
             }
 
             document.getElementById('surveyGridDrawStatus').textContent = "Grid explicitly conformed without distortion.";
+            if (!collabApplying.survey) {
+                const rotEl = document.getElementById('gridRotationSlider');
+                const angleDeg = rotEl ? parseFloat(rotEl.value) || 0 : 0;
+                sendCollabMessage({
+                    type: 'survey_generate',
+                    points: surveyPolygonPoints.map(p => ({ x: p.x, y: p.y, z: p.z })),
+                    spacing,
+                    rotation: angleDeg
+                });
+            }
         };
 
         window.toggleSurveyGeneratedGrid = function(show) {
@@ -14442,6 +15515,8 @@
         // Instantiate global annotation manager after scene is ready
 
         window.annMgr = new AnnotationManager();
+
+        applyPendingCollabState();
 
         // Load persisted annotations when the job ID is known (non-empty)
         if (window.annMgr._jobId && window.annMgr._jobId !== '[[JOB_ID]]') {
