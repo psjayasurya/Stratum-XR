@@ -289,6 +289,16 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
             elif msg_type == "signal":
                 await manager.broadcast(session_id, data, exclude_socket=websocket)
 
+            elif msg_type == "call_start":
+                await manager.broadcast(session_id, data, exclude_socket=websocket)
+
+            elif msg_type == "call_end":
+                await manager.broadcast(session_id, data, exclude_socket=websocket)
+
+            elif msg_type == "audio_data":
+                # Broadcast audio frames over WebSocket (fallback when TURN fails)
+                await manager.broadcast(session_id, data, exclude_socket=websocket)
+
             elif msg_type == "lock_acquire":
                 resource_id = data.get("resource_id")
                 owner = data.get("owner")

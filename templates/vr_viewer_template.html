@@ -3740,9 +3740,19 @@
         // ============ COLLABORATION WEBSOCKET ============
         let collaborationWS = null;
         let currentSessionId = null;
+        let isSessionHost = false;
+        let isPolite = false;
         let isInCall = false;
         let peerConnection = null;
         let localStream = null;
+        let remoteAudioEl = null;
+        let makingOffer = false;
+        let ignoreOffer = false;
+        let speechRecognition = null;
+        let speechActive = false;
+        let scriptProcessor = null;
+        let audioFallbackActive = false;
+        let iceFailureTimer = null;
         let lastCameraSync = 0;
         let collabPendingLocks = {};
         let lastModelSyncTs = 0;
@@ -4137,6 +4147,8 @@
                 const response = await fetch('/session/create', { method: 'POST' });
                 const data = await response.json();
                 currentSessionId = data.session_id;
+                isSessionHost = true;
+                isPolite = false;
 
                 // Show session UI
                 document.getElementById('session-status').style.display = 'block';
@@ -4177,6 +4189,8 @@
             }
 
             currentSessionId = sessionId;
+            isSessionHost = false;
+            isPolite = true;
             closeJoinSessionModal();
 
             // Show session UI
@@ -4370,63 +4384,384 @@
                     // Handle WebRTC signaling for calls
                     handleSignal(data.data);
                     break;
+
+                case 'call_start':
+                    autoStartVoiceCall();
+                    break;
+
+                case 'call_end':
+                    if (isInCall) {
+                        stopVoiceCall();
+                    }
+                    break;
+
+                case 'audio_data':
+                    // Handle WebSocket audio fallback
+                    if (audioFallbackActive) {
+                        playAudioFallback(data.data);
+                    }
+                    break;
+            }
+        }
+
+        async function startVoiceCall(autoTriggered) {
+            const callBtn = document.getElementById('call-btn');
+            const callIcon = document.getElementById('call-icon-fa') || document.getElementById('call-icon');
+            const callText = document.getElementById('call-text');
+
+            if (isInCall) return;
+
+            try {
+                if (!window.isSecureContext) {
+                    window.notifyUser('Microphone requires HTTPS or localhost. Please open the app over a trusted HTTPS URL.');
+                    return;
+                }
+
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    window.notifyUser('Microphone API is not available in this browser.');
+                    return;
+                }
+
+                if (navigator.permissions && navigator.permissions.query) {
+                    try {
+                        const micPerm = await navigator.permissions.query({ name: 'microphone' });
+                        if (micPerm.state === 'denied') {
+                            window.notifyUser('Microphone permission is blocked for this site. Please allow it in the browser settings.');
+                            return;
+                        }
+                    } catch (permErr) {
+                        console.warn('Permission query failed:', permErr);
+                    }
+                }
+
+                // Start call - get microphone permission
+                localStream = await navigator.mediaDevices.getUserMedia({
+                    audio: true,
+                    video: false
+                });
+
+                isInCall = true;
+                if (callIcon) callIcon.textContent = '🔴';
+                if (callText) callText.textContent = 'End Call';
+                callBtn.style.background = 'rgba(239, 68, 68, 0.2)';
+
+                // Initialize WebRTC peer connection
+                initializePeerConnection();
+
+                // Create and send offer to start negotiation
+                await createAndSendOffer();
+
+                // Start local transcription if available
+                startLocalTranscription();
+
+                if (!autoTriggered) {
+                    sendCollabMessage({ type: 'call_start' });
+                }
+
+                console.log('Voice call started');
+            } catch (err) {
+                console.error('Failed to start call:', err);
+                const errName = err && err.name ? err.name : 'UnknownError';
+                let msg = 'Failed to access microphone.';
+                if (errName === 'NotAllowedError' || errName === 'SecurityError') {
+                    msg = 'Microphone access denied. Please allow mic permission and ensure the HTTPS certificate is trusted.';
+                } else if (errName === 'NotFoundError' || errName === 'DevicesNotFoundError') {
+                    msg = 'No microphone device found. Please connect a mic and try again.';
+                } else if (errName === 'NotReadableError' || errName === 'AbortError') {
+                    msg = 'Microphone is in use by another app or not readable. Close other apps and retry.';
+                } else if (errName === 'OverconstrainedError') {
+                    msg = 'Microphone constraints could not be satisfied. Try a different device.';
+                }
+
+                if (autoTriggered) {
+                    window.notifyUser('Incoming call. Click Start Call to enable your microphone.');
+                } else {
+                    window.notifyUser(msg + ` (${errName})`);
+                }
+            }
+        }
+
+        function stopVoiceCall() {
+            const callBtn = document.getElementById('call-btn');
+            const callIcon = document.getElementById('call-icon-fa') || document.getElementById('call-icon');
+            const callText = document.getElementById('call-text');
+
+            stopLocalTranscription();
+            stopAudioFallback();
+            
+            if (iceFailureTimer) {
+                clearTimeout(iceFailureTimer);
+                iceFailureTimer = null;
+            }
+
+            // End call
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+                localStream = null;
+            }
+
+            if (peerConnection) {
+                peerConnection.close();
+                peerConnection = null;
+            }
+
+            isInCall = false;
+            if (callIcon) callIcon.textContent = '🎤';
+            if (callText) callText.textContent = 'Start Call';
+            if (callBtn) callBtn.style.background = 'rgba(255, 255, 255, 0.08)';
+
+            console.log('Voice call ended');
+        }
+
+        function autoStartVoiceCall() {
+            if (isInCall) return;
+            startVoiceCall(true);
+        }
+
+        function startLocalTranscription() {
+            if (speechActive) return;
+            const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!Recognition) {
+                console.warn('SpeechRecognition not supported in this browser');
+                return;
+            }
+
+            speechRecognition = new Recognition();
+            speechRecognition.lang = 'en-US';
+            speechRecognition.interimResults = false;
+            speechRecognition.continuous = true;
+
+            speechRecognition.onresult = (event) => {
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    const result = event.results[i];
+                    if (result.isFinal) {
+                        const text = result[0] && result[0].transcript ? result[0].transcript.trim() : '';
+                        if (text) {
+                            sendCollabMessage({
+                                type: 'transcript',
+                                data: { speaker: userEmail, text }
+                            });
+                        }
+                    }
+                }
+            };
+
+            speechRecognition.onerror = (err) => {
+                // Suppress noisy 'no-speech' errors; only log critical ones
+                if (err && err.error && err.error !== 'no-speech') {
+                    console.warn('SpeechRecognition error:', err.error);
+                }
+            };
+
+            speechRecognition.onend = () => {
+                if (speechActive) {
+                    try {
+                        speechRecognition.start();
+                    } catch (err) {
+                        console.warn('SpeechRecognition restart failed:', err);
+                    }
+                }
+            };
+
+            try {
+                speechRecognition.start();
+                speechActive = true;
+            } catch (err) {
+                console.warn('SpeechRecognition start failed:', err);
+                speechActive = false;
+            }
+        }
+
+        function stopLocalTranscription() {
+            speechActive = false;
+            if (speechRecognition) {
+                try {
+                    speechRecognition.stop();
+                } catch (err) {
+                    console.warn('SpeechRecognition stop failed:', err);
+                }
+                speechRecognition = null;
+            }
+        }
+
+        function startAudioFallback() {
+            if (audioFallbackActive || !localStream) return;
+            audioFallbackActive = true;
+            window.notifyUser('WebRTC failed. Using WebSocket audio fallback (lower quality).');
+            
+            try {
+                // Create audio context for local stream capture
+                if (!audioContext) {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                
+                const source = audioContext.createMediaStreamSource(localStream);
+                
+                // Use ScriptProcessorNode for audio frame capture
+                const bufferSize = 4096;
+                scriptProcessor = audioContext.createScriptProcessor(bufferSize, 1, 1);
+                
+                scriptProcessor.onaudioprocess = (event) => {
+                    const inputData = event.inputBuffer.getChannelData(0);
+                    // Encode audio frame as base64 and send
+                    const base64Audio = btoa(String.fromCharCode(...new Uint8Array(
+                        new Float32Array(inputData).buffer
+                    )));
+                    
+                    if (collaborationWS && collaborationWS.readyState === WebSocket.OPEN) {
+                        collaborationWS.send(JSON.stringify({
+                            type: 'audio_data',
+                            data: base64Audio
+                        }));
+                    }
+                };
+                
+                source.connect(scriptProcessor);
+                scriptProcessor.connect(audioContext.destination);
+                
+                console.log('Audio fallback started. Sending raw audio over WebSocket.');
+            } catch (err) {
+                console.error('Failed to start audio fallback:', err);
+                audioFallbackActive = false;
+            }
+        }
+
+        function stopAudioFallback() {
+            if (scriptProcessor) {
+                try {
+                    scriptProcessor.disconnect();
+                } catch (err) {
+                    console.warn('ScriptProcessor disconnect failed:', err);
+                }
+                scriptProcessor = null;
+            }
+            audioFallbackActive = false;
+        }
+
+        function playAudioFallback(base64Audio) {
+            if (!audioContext) return;
+            
+            try {
+                // Decode base64 to binary
+                const binaryString = atob(base64Audio);
+                const bytes = new Uint8Array(binaryString.length);
+                for (let i = 0; i < binaryString.length; i++) {
+                    bytes[i] = binaryString.charCodeAt(i);
+                }
+                
+                // Convert to Float32Array (PCM)
+                const float32Data = new Float32Array(bytes.buffer);
+                
+                // Create buffer and play
+                const audioBuffer = audioContext.createBuffer(1, float32Data.length, audioContext.sampleRate);
+                const channelData = audioBuffer.getChannelData(0);
+                channelData.set(float32Data);
+                
+                const source = audioContext.createBufferSource();
+                source.buffer = audioBuffer;
+                source.connect(audioContext.destination);
+                source.start(0);
+            } catch (err) {
+                console.warn('Failed to play audio fallback frame:', err);
             }
         }
 
         window.toggleVoiceCall = async function () {
-            const callBtn = document.getElementById('call-btn');
-            const callIcon = document.getElementById('call-icon');
-            const callText = document.getElementById('call-text');
-
             if (!isInCall) {
-                try {
-                    // Start call - get microphone permission
-                    localStream = await navigator.mediaDevices.getUserMedia({
-                        audio: true,
-                        video: false
-                    });
-
-                    isInCall = true;
-                    callIcon.textContent = '🔴';
-                    callText.textContent = 'End Call';
-                    callBtn.style.background = 'rgba(239, 68, 68, 0.2)';
-
-                    // Initialize WebRTC peer connection
-                    initializePeerConnection();
-
-                    console.log('Voice call started');
-                } catch (err) {
-                    console.error('Failed to start call:', err);
-                    window.notifyUser('Failed to access microphone. Please check permissions.');
-                }
+                await startVoiceCall(false);
             } else {
-                // End call
-                if (localStream) {
-                    localStream.getTracks().forEach(track => track.stop());
-                    localStream = null;
-                }
-
-                if (peerConnection) {
-                    peerConnection.close();
-                    peerConnection = null;
-                }
-
-                isInCall = false;
-                callIcon.textContent = '🎤';
-                callText.textContent = 'Start Call';
-                callBtn.style.background = 'rgba(255, 255, 255, 0.08)';
-
-                console.log('Voice call ended');
+                stopVoiceCall();
+                sendCollabMessage({ type: 'call_end' });
             }
         };
 
+        async function createAndSendOffer() {
+            if (!peerConnection || !collaborationWS) return;
+            if (peerConnection.signalingState !== 'stable') return;
+            if (makingOffer) return; // Don't re-offer if already offering
+
+            try {
+                makingOffer = true;
+                const offer = await peerConnection.createOffer({ offerToReceiveAudio: true });
+                await peerConnection.setLocalDescription(offer);
+                collaborationWS.send(JSON.stringify({
+                    type: 'signal',
+                    data: { type: 'offer', sdp: offer }
+                }));
+                console.log('Offer sent');
+            } catch (err) {
+                console.error('Failed to create offer:', err);
+            } finally {
+                makingOffer = false;
+            }
+        }
+
         function initializePeerConnection() {
-            // Basic WebRTC setup (can be extended with STUN/TURN servers)
+            // WebRTC setup with STUN + TURN for NAT traversal across networks
             const configuration = {
-                iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:stun1.l.google.com:19302' },
+                    { urls: 'stun:stun2.l.google.com:19302' },
+                    // Primary: Open relay (no auth required)
+                    { 
+                        urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443', 'turn:openrelay.metered.ca:443?transport=tcp'],
+                        username: 'openrelayproject',
+                        credential: 'openrelayproject'
+                    },
+                    // Backup: NUMB relay (no auth)
+                    {
+                        urls: ['turn:numb.viagee.com'],
+                        username: 'webrtc@example.com',
+                        credential: 'webrtc'
+                    },
+                    // Backup: Another free relay
+                    {
+                        urls: ['turn:stun.stunprotocol.org:3478', 'turn:stun.stunprotocol.org:5349'],
+                        username: 'guest',
+                        credential: 'password'
+                    }
+                ]
             };
 
             peerConnection = new RTCPeerConnection(configuration);
+
+            if (!remoteAudioEl) {
+                remoteAudioEl = document.createElement('audio');
+                remoteAudioEl.id = 'collab-remote-audio';
+                remoteAudioEl.autoplay = true;
+                remoteAudioEl.playsInline = true;
+                remoteAudioEl.muted = false;
+                remoteAudioEl.volume = 1.0;
+                document.body.appendChild(remoteAudioEl);
+            }
+
+            peerConnection.oniceconnectionstatechange = () => {
+                console.log('ICE state:', peerConnection.iceConnectionState);
+                if (peerConnection.iceConnectionState === 'failed') {
+                    console.error('ICE connection failed. Check TURN credentials, firewall, or network.');
+                    window.notifyUser('Connection failed. Check network/firewall or try again.');
+                    
+                    // After 3 seconds, fallback to audio over WebSocket
+                    if (!audioFallbackActive && iceFailureTimer === null) {
+                        iceFailureTimer = setTimeout(() => {
+                            console.log('Activating audio fallback (WebSocket)');
+                            startAudioFallback();
+                        }, 3000);
+                    }
+                }
+            };
+
+            peerConnection.onconnectionstatechange = () => {
+                console.log('Peer connection state:', peerConnection.connectionState);
+                if (peerConnection.connectionState === 'failed') {
+                    console.error('Peer connection failed. ICE/TURN negotiation unsuccessful.');
+                }
+            };
+
+            peerConnection.onicegatheringstatechange = () => {
+                console.log('ICE gathering state:', peerConnection.iceGatheringState);
+            };
 
             // Add local stream
             if (localStream) {
@@ -4437,49 +4772,99 @@
 
             // Handle ICE candidates
             peerConnection.onicecandidate = (event) => {
-                if (event.candidate && collaborationWS) {
-                    collaborationWS.send(JSON.stringify({
-                        type: 'signal',
-                        data: {
-                            type: 'ice-candidate',
-                            candidate: event.candidate
-                        }
-                    }));
+                if (event.candidate) {
+                    const cand = event.candidate;
+                    console.log('ICE candidate:', { 
+                        type: cand.type, 
+                        protocol: cand.protocol, 
+                        address: cand.address,
+                        port: cand.port,
+                        foundation: cand.foundation
+                    });
+                    if (collaborationWS) {
+                        collaborationWS.send(JSON.stringify({
+                            type: 'signal',
+                            data: {
+                                type: 'ice-candidate',
+                                candidate: event.candidate
+                            }
+                        }));
+                    }
+                } else {
+                    console.log('ICE gathering complete (no more candidates)');
                 }
             };
 
             // Handle remote stream
             peerConnection.ontrack = (event) => {
-                const remoteAudio = new Audio();
-                remoteAudio.srcObject = event.streams[0];
-                remoteAudio.play();
+                remoteAudioEl.srcObject = event.streams[0];
+                remoteAudioEl.play().catch(() => {
+                    // Autoplay may be blocked; user interaction already occurred on call start.
+                });
+                console.log('Remote track received:', event.track && event.track.kind);
             };
         }
 
-        function handleSignal(signal) {
+        async function handleSignal(signal) {
             // Handle WebRTC signaling messages
-            if (!peerConnection) return;
+            if (!peerConnection) {
+                if (localStream) {
+                    initializePeerConnection();
+                } else {
+                    console.warn('Signal received before call start');
+                    return;
+                }
+            }
 
             switch (signal.type) {
                 case 'offer':
-                    peerConnection.setRemoteDescription(new RTCSessionDescription(signal.sdp));
-                    peerConnection.createAnswer().then(answer => {
-                        peerConnection.setLocalDescription(answer);
+                    try {
+                        const offerCollision = makingOffer && peerConnection.signalingState !== 'stable';
+                        
+                        if (offerCollision) {
+                            console.log('Offer collision detected. Using polite peer logic:', { isPolite, makingOffer });
+                            ignoreOffer = !isPolite;
+                            if (ignoreOffer) {
+                                console.warn('Ignoring offer (collision, impolite)');
+                                return;
+                            } else {
+                                console.log('Accepting offer (collision, polite) - rolling back local offer');
+                                await peerConnection.setLocalDescription({ type: 'rollback' });
+                            }
+                        }
+
+                        console.log('Setting remote description with offer');
+                        await peerConnection.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+                        const answer = await peerConnection.createAnswer();
+                        await peerConnection.setLocalDescription(answer);
                         if (collaborationWS) {
                             collaborationWS.send(JSON.stringify({
                                 type: 'signal',
                                 data: { type: 'answer', sdp: answer }
                             }));
+                            console.log('Answer sent');
                         }
-                    });
+                    } catch (err) {
+                        console.error('Failed to handle offer:', err);
+                    }
                     break;
 
                 case 'answer':
-                    peerConnection.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+                    try {
+                        await peerConnection.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+                    } catch (err) {
+                        console.error('Failed to handle answer:', err);
+                    }
                     break;
 
                 case 'ice-candidate':
-                    peerConnection.addIceCandidate(new RTCIceCandidate(signal.candidate));
+                    try {
+                        if (!ignoreOffer) {
+                            await peerConnection.addIceCandidate(new RTCIceCandidate(signal.candidate));
+                        }
+                    } catch (err) {
+                        console.error('Failed to add ICE candidate:', err);
+                    }
                     break;
             }
         }
