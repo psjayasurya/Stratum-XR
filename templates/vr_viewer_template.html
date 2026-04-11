@@ -410,6 +410,13 @@
             color: var(--accent-color);
         }
 
+        /* ====== RESIZE STATE ====== */
+
+        .vr-tab-content.resizing {
+            box-shadow: 0 0 20px rgba(107, 114, 128, 0.6), 0 30px 80px rgba(0, 0, 0, 0.8);
+            border-color: rgba(107, 114, 128, 1);
+        }
+
         /* ====== PROFILE POPUP ====== */
         .profile-backdrop {
             display: none;
@@ -3753,6 +3760,7 @@
         let scriptProcessor = null;
         let audioFallbackActive = false;
         let iceFailureTimer = null;
+        let pendingSignals = [];
         let lastCameraSync = 0;
         let collabPendingLocks = {};
         let lastModelSyncTs = 0;
@@ -4448,8 +4456,13 @@
                 // Initialize WebRTC peer connection
                 initializePeerConnection();
 
+                // Process signaling that may arrive before call setup is complete.
+                await flushPendingSignals();
+
                 // Create and send offer to start negotiation
-                await createAndSendOffer();
+                if (peerConnection && peerConnection.signalingState === 'stable' && !peerConnection.currentRemoteDescription) {
+                    await createAndSendOffer();
+                }
 
                 // Start local transcription if available
                 startLocalTranscription();
@@ -4516,6 +4529,14 @@
         function autoStartVoiceCall() {
             if (isInCall) return;
             startVoiceCall(true);
+        }
+
+        async function flushPendingSignals() {
+            if (!pendingSignals.length) return;
+            const queued = pendingSignals.splice(0);
+            for (const sig of queued) {
+                await handleSignal(sig, true);
+            }
         }
 
         function startLocalTranscription() {
@@ -4805,13 +4826,14 @@
             };
         }
 
-        async function handleSignal(signal) {
+        async function handleSignal(signal, fromQueue = false) {
             // Handle WebRTC signaling messages
             if (!peerConnection) {
                 if (localStream) {
                     initializePeerConnection();
                 } else {
-                    console.warn('Signal received before call start');
+                    if (!fromQueue && signal) pendingSignals.push(signal);
+                    console.warn('Signal received before call start; queued for later');
                     return;
                 }
             }
@@ -4819,12 +4841,13 @@
             switch (signal.type) {
                 case 'offer':
                     try {
-                        const offerCollision = makingOffer && peerConnection.signalingState !== 'stable';
+                        const offerCollision = makingOffer || peerConnection.signalingState !== 'stable';
+                        const shouldIgnoreOffer = !isPolite && offerCollision;
+                        ignoreOffer = shouldIgnoreOffer;
                         
                         if (offerCollision) {
                             console.log('Offer collision detected. Using polite peer logic:', { isPolite, makingOffer });
-                            ignoreOffer = !isPolite;
-                            if (ignoreOffer) {
+                            if (shouldIgnoreOffer) {
                                 console.warn('Ignoring offer (collision, impolite)');
                                 return;
                             } else {
@@ -4837,6 +4860,7 @@
                         await peerConnection.setRemoteDescription(new RTCSessionDescription(signal.sdp));
                         const answer = await peerConnection.createAnswer();
                         await peerConnection.setLocalDescription(answer);
+                        ignoreOffer = false;
                         if (collaborationWS) {
                             collaborationWS.send(JSON.stringify({
                                 type: 'signal',
@@ -4851,6 +4875,7 @@
 
                 case 'answer':
                     try {
+                        ignoreOffer = false;
                         await peerConnection.setRemoteDescription(new RTCSessionDescription(signal.sdp));
                     } catch (err) {
                         console.error('Failed to handle answer:', err);
@@ -4859,9 +4884,8 @@
 
                 case 'ice-candidate':
                     try {
-                        if (!ignoreOffer) {
-                            await peerConnection.addIceCandidate(new RTCIceCandidate(signal.candidate));
-                        }
+                        if (ignoreOffer) return;
+                        await peerConnection.addIceCandidate(new RTCIceCandidate(signal.candidate));
                     } catch (err) {
                         console.error('Failed to add ICE candidate:', err);
                     }
@@ -5487,19 +5511,61 @@
 
         function initializeModalDragAndScale() {
             const modals = document.querySelectorAll('.vr-tab-content');
-            
+            const edgeThreshold = 8;
+            const minWidth = 250;
+            const minHeight = 200;
+
+            const cursorForPosition = {
+                'top': 'ns-resize',
+                'bottom': 'ns-resize',
+                'left': 'ew-resize',
+                'right': 'ew-resize',
+                'top-left': 'nwse-resize',
+                'bottom-right': 'nwse-resize',
+                'top-right': 'nesw-resize',
+                'bottom-left': 'nesw-resize'
+            };
+
+            function getResizePosition(modal, event) {
+                const rect = modal.getBoundingClientRect();
+                const onLeft = event.clientX >= rect.left && event.clientX <= rect.left + edgeThreshold;
+                const onRight = event.clientX <= rect.right && event.clientX >= rect.right - edgeThreshold;
+                const onTop = event.clientY >= rect.top && event.clientY <= rect.top + edgeThreshold;
+                const onBottom = event.clientY <= rect.bottom && event.clientY >= rect.bottom - edgeThreshold;
+
+                if (onTop && onLeft) return 'top-left';
+                if (onTop && onRight) return 'top-right';
+                if (onBottom && onLeft) return 'bottom-left';
+                if (onBottom && onRight) return 'bottom-right';
+                if (onTop) return 'top';
+                if (onBottom) return 'bottom';
+                if (onLeft) return 'left';
+                if (onRight) return 'right';
+                return '';
+            }
+
             modals.forEach(modal => {
                 const modalId = modal.id;
-                
+                if (modal.dataset.dragResizeInitialized === '1') return;
+                modal.dataset.dragResizeInitialized = '1';
+
                 // Initialize state for this modal
                 modalStates[modalId] = {
                     isDragging: false,
+                    isResizing: false,
                     startX: 0,
                     startY: 0,
                     offsetX: 0,
                     offsetY: 0,
                     scale: 1,
-                    position: { x: 0, y: 0 }
+                    position: { x: 0, y: 0 },
+                    resizeStartX: 0,
+                    resizeStartY: 0,
+                    resizeStartWidth: 0,
+                    resizeStartHeight: 0,
+                    resizeStartOffsetX: 0,
+                    resizeStartOffsetY: 0,
+                    resizePosition: ''
                 };
 
                 // Find the title element for drag handle
@@ -5508,11 +5574,48 @@
 
                 // Drag initialization on title bar
                 titleBar.addEventListener('mousedown', (e) => {
+                    if (e.button !== 0) return;
+                    if (getResizePosition(modal, e)) return;
                     const state = modalStates[modalId];
                     state.isDragging = true;
                     state.startX = e.clientX - state.offsetX;
                     state.startY = e.clientY - state.offsetY;
                     modal.classList.add('dragging');
+                });
+
+                // Boundary resize initialization
+                modal.addEventListener('mousedown', (e) => {
+                    if (e.button !== 0) return;
+                    const state = modalStates[modalId];
+                    const resizePosition = getResizePosition(modal, e);
+                    if (!resizePosition) return;
+
+                    state.isResizing = true;
+                    state.resizePosition = resizePosition;
+                    state.resizeStartX = e.clientX;
+                    state.resizeStartY = e.clientY;
+                    state.resizeStartWidth = modal.offsetWidth;
+                    state.resizeStartHeight = modal.offsetHeight;
+                    state.resizeStartOffsetX = state.offsetX;
+                    state.resizeStartOffsetY = state.offsetY;
+                    modal.classList.add('resizing');
+                    e.preventDefault();
+                    e.stopPropagation();
+                });
+
+                // Cursor feedback on boundaries
+                modal.addEventListener('mousemove', (e) => {
+                    const state = modalStates[modalId];
+                    if (state.isDragging || state.isResizing) return;
+                    const resizePosition = getResizePosition(modal, e);
+                    modal.style.cursor = resizePosition ? (cursorForPosition[resizePosition] || 'default') : 'grab';
+                });
+
+                modal.addEventListener('mouseleave', () => {
+                    const state = modalStates[modalId];
+                    if (!state.isDragging && !state.isResizing) {
+                        modal.style.cursor = 'grab';
+                    }
                 });
 
                 // Drag move
@@ -5529,29 +5632,58 @@
                     updateModalTransform(modal, state);
                 });
 
-                // Drag end
+                // Resize move
+                document.addEventListener('mousemove', (e) => {
+                    const state = modalStates[modalId];
+                    if (!state.isResizing) return;
+
+                    const deltaX = e.clientX - state.resizeStartX;
+                    const deltaY = e.clientY - state.resizeStartY;
+                    const pos = state.resizePosition;
+
+                    let newWidth = state.resizeStartWidth;
+                    let newHeight = state.resizeStartHeight;
+                    let nextOffsetX = state.resizeStartOffsetX;
+                    let nextOffsetY = state.resizeStartOffsetY;
+
+                    // Handle horizontal resize
+                    if (pos.includes('right')) {
+                        newWidth = Math.max(minWidth, state.resizeStartWidth + deltaX);
+                    } else if (pos.includes('left')) {
+                        newWidth = Math.max(minWidth, state.resizeStartWidth - deltaX);
+                        nextOffsetX = state.resizeStartOffsetX + (state.resizeStartWidth - newWidth);
+                    }
+
+                    // Handle vertical resize
+                    if (pos.includes('bottom')) {
+                        newHeight = Math.max(minHeight, state.resizeStartHeight + deltaY);
+                    } else if (pos.includes('top')) {
+                        newHeight = Math.max(minHeight, state.resizeStartHeight - deltaY);
+                        nextOffsetY = state.resizeStartOffsetY + (state.resizeStartHeight - newHeight);
+                    }
+
+                    state.offsetX = nextOffsetX;
+                    state.offsetY = nextOffsetY;
+
+                    // Apply new dimensions
+                    modal.style.width = `${newWidth}px`;
+                    modal.style.height = `${newHeight}px`;
+                    modal.style.maxHeight = 'none';
+                    modal.style.maxWidth = 'none';
+                    updateModalTransform(modal, state);
+                });
+
+                // Drag/resize end
                 document.addEventListener('mouseup', () => {
                     const state = modalStates[modalId];
                     if (state.isDragging) {
                         state.isDragging = false;
                         modal.classList.remove('dragging');
                     }
-                });
-
-                // Scale with mouse wheel (when hovering over modal)
-                modal.addEventListener('wheel', (e) => {
-                    if (e.ctrlKey || e.metaKey) {
-                        e.preventDefault();
-                        const state = modalStates[modalId];
-                        const delta = e.deltaY > 0 ? -0.05 : 0.05;
-                        state.scale = Math.max(0.6, Math.min(2.0, state.scale + delta));
-                        updateModalTransform(modal, state);
+                    if (state.isResizing) {
+                        state.isResizing = false;
+                        modal.classList.remove('resizing');
                     }
-                });
-
-                // Prevent text selection during drag
-                titleBar.addEventListener('selectstart', (e) => {
-                    if (modalStates[modalId].isDragging) e.preventDefault();
                 });
             });
         }
