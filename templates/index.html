@@ -1041,6 +1041,44 @@
             }
         }
     </style>
+    <style>
+        :root {
+            --primary: #4f86b8;
+            --primary-dark: #3f6f98;
+            --primary-light: #6a9ac6;
+            --bg-body: #1f242b;
+            --bg-surface: #2b3139;
+            --bg-header: #2a3038;
+            --border: #454d58;
+            --border-light: #3f4752;
+            --text-primary: #dde2e8;
+            --text-secondary: #9ca6b2;
+            --modal-bg: #2c323a;
+            --input-bg: #262d36;
+            --shadow: rgba(0, 0, 0, 0.35);
+        }
+
+        body {
+            background: var(--bg-body) !important;
+        }
+
+        .tab-content,
+        .modal-content,
+        .container,
+        .card {
+            border-radius: 4px !important;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35) !important;
+        }
+
+        .tab-btn,
+        .btn,
+        button,
+        input,
+        select,
+        textarea {
+            border-radius: 2px !important;
+        }
+    </style>
 </head>
 
 <body>
@@ -2117,7 +2155,6 @@
             }).catch(() => { });
         });
     </script>
-    <script src="/static/splash_cursor.js"></script>
     <script src="/static/earth.js"></script>
     <script src="/static/text_type.js"></script>
 </body>

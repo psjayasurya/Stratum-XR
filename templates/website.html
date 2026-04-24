@@ -7,6 +7,30 @@
     <title>Stratum XR (Extended Reality)</title>
     <link rel="stylesheet" href="static/webstyle.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary-color: #4f86b8 !important;
+            --secondary-color: #3f6f98 !important;
+            --dark-color: #1f242b !important;
+            --light-color: #dde2e8 !important;
+            --text-color: #dde2e8 !important;
+        }
+
+        body, .header, .hero, .description, .pricing, .why, .footer {
+            background-image: none !important;
+            box-shadow: none !important;
+        }
+
+        body { background: #1f242b !important; color: #dde2e8 !important; }
+        .header { background: #2a3038 !important; border-bottom: 1px solid #454d58 !important; }
+        .feature-card, .pricing-card, .why-content, .description-content {
+            background: #2c323a !important;
+            border: 1px solid #454d58 !important;
+            border-radius: 4px !important;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.35) !important;
+        }
+        .btn, .btn-primary, .btn-outline, .btn-login { border-radius: 2px !important; }
+    </style>
 </head>
 
 <body>
@@ -42,11 +66,11 @@
             <div class="hero-main">
                 <div class="hero-content">
                     <h1 class="hero-title">Visualize the Invisible</h1>
-                    <p class="hero-subtitle">High-performance computing brings subsurface GPR data into real-world
-                        context.</p>
+                    <p class="hero-subtitle">High-performance computing transforms GPR and multi-source geospatial data
+                        into immersive, real-world insight.</p>
                 </div>
                 <div class="hero-image">
-                    <img src="static/dashboard.png" alt="Stratum XR Interface" class="side-image">
+                    <img src="static/banner.png" alt="Stratum XR Banner" class="side-image">
                 </div>
             </div>
             <div class="features-grid">
@@ -56,14 +80,29 @@
                     <p>Process data with ease on any computer.</p>
                 </div>
                 <div class="feature-card">
-                    <i class="fas fa-cloud-upload-alt"></i>
-                    <h3>Drag & Drop</h3>
-                    <p>Import data from any GPR instrument.</p>
-                </div>
-                <div class="feature-card">
                     <i class="fas fa-users"></i>
                     <h3>Collaborate in Real Time</h3>
                     <p>Share securely with cloud storage.</p>
+                </div>
+                <div class="feature-card">
+                    <i class="fas fa-layer-group"></i>
+                    <h3>Multi-Format Support</h3>
+                    <p>Work with GPR, LiDAR, photogrammetry and other geospatial sources.</p>
+                </div>
+                <div class="feature-card">
+                    <i class="fas fa-shield-alt"></i>
+                    <h3>Secure Cloud Sync</h3>
+                    <p>Encrypted backups, access controls and audited data protection.</p>
+                </div>
+                <div class="feature-card">
+                    <i class="fas fa-cube"></i>
+                    <h3>3D Visualization</h3>
+                    <p>Explore layered subsurface structures in interactive, immersive 3D scenes.</p>
+                </div>
+                <div class="feature-card">
+                    <i class="fas fa-vr-cardboard"></i>
+                    <h3>Virtual Reality Support</h3>
+                    <p>Step into your datasets with VR-ready workflows for immersive analysis and collaboration.</p>
                 </div>
             </div>
         </div>
@@ -74,30 +113,11 @@
         <div class="container">
             <div class="description-main">
                 <div class="description-image">
-                    <img src="static/viewer2.png" alt="Advanced GPR Analysis" class="side-image-alt">
+                    <img src="static/website-image.png" alt="Stratum XR Platform View" class="side-image-alt">
                 </div>
                 <div class="description-content">
-                    <p class="description-text">Developed to be a complete solution for GPR data Visualization, GPR VR
-                        Explorer is easy to
+                    <p class="description-text">Developed to be a complete solution for Surface and Sub-Surface data  Visualization, Stratum XR is easy to
                         use yet has all the complex features you need for advanced projects.</p>
-                    <div class="feature-list">
-                        <div class="feature-item">
-                            <i class="fas fa-bolt"></i>
-                            <span>Automated GPR processing</span>
-                        </div>
-                        <div class="feature-item">
-                            <i class="fas fa-link"></i>
-                            <span>Customisable project link sharing</span>
-                        </div>
-                        <div class="feature-item">
-                            <i class="fas fa-highlighter"></i>
-                            <span>Sketching tool for areas of interest</span>
-                        </div>
-                        <div class="feature-item">
-                            <i class="fas fa-shield-alt"></i>
-                            <span>Audited & certified data protection</span>
-                        </div>
-                    </div>
                 </div>
             </div>
         </div>

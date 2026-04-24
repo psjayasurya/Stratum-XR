@@ -18,6 +18,13 @@ router = APIRouter()
 # }
 session_store: Dict[str, dict] = {}
 
+
+def _find_socket_by_id(session_id: str, socket_id: str):
+    for sock in manager.active_connections.get(session_id, []):
+        if str(id(sock)) == socket_id:
+            return sock
+    return None
+
 def _init_session_state(session_id: str):
     if session_id not in session_store:
         session_store[session_id] = {
@@ -161,12 +168,22 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
             if msg_type == "join":
                 email = data.get("email")
                 SessionManager.add_participant(session_id, email)
-                state["socket_users"][str(id(websocket))] = email
+                socket_id = str(id(websocket))
+                state["socket_users"][socket_id] = email
+
+                # Tell the newly joined client its peer id for targeted WebRTC signaling.
+                await websocket.send_json({
+                    "type": "join_ack",
+                    "peer_id": socket_id,
+                    "session_id": session_id
+                })
+
                 # Broadcast participant update
                 await manager.broadcast(session_id, {
                     "type": "participant_update",
-                    "count": len(state["participants"]),
-                    "participants": state["participants"]
+                    "count": len(state["socket_users"]),
+                    "participants": state["participants"],
+                    "peer_ids": list(state["socket_users"].keys())
                 })
                 
             elif msg_type == "annotation_add":
@@ -287,7 +304,26 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                 await manager.broadcast(session_id, data, exclude_socket=websocket)
 
             elif msg_type == "signal":
-                await manager.broadcast(session_id, data, exclude_socket=websocket)
+                sender_id = str(id(websocket))
+                target_peer_id = data.get("target_peer_id")
+
+                if target_peer_id:
+                    target_socket = _find_socket_by_id(session_id, target_peer_id)
+                    if target_socket:
+                        await target_socket.send_json({
+                            "type": "signal",
+                            "from_peer_id": sender_id,
+                            "target_peer_id": target_peer_id,
+                            "data": data.get("data")
+                        })
+                else:
+                    # Backward-compatible fallback: fan out when target is missing.
+                    payload = {
+                        "type": "signal",
+                        "from_peer_id": sender_id,
+                        "data": data.get("data")
+                    }
+                    await manager.broadcast(session_id, payload, exclude_socket=websocket)
 
             elif msg_type == "call_start":
                 await manager.broadcast(session_id, data, exclude_socket=websocket)
@@ -372,6 +408,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
             state["participants"] = [p for p in state["participants"] if p != owner]
             await manager.broadcast(session_id, {
                 "type": "participant_update",
-                "count": len(state["participants"]),
-                "participants": state["participants"]
+                "count": len(state["socket_users"]),
+                "participants": state["participants"],
+                "peer_ids": list(state["socket_users"].keys())
             })

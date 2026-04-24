@@ -2,7 +2,7 @@
 Job Management Routes
 Handles job status, viewing, listing, downloading, and cleanup.
 """
-from fastapi import APIRouter, Request, HTTPException, Cookie
+from fastapi import APIRouter, Request, HTTPException, Cookie, UploadFile, File, Form
 from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse
 from typing import Optional
 import os
@@ -19,6 +19,7 @@ from app.services.viewer_generator import create_vr_viewer
 from app.routes.auth_routes import get_current_user
 from app.database import get_db
 from app.models import SavedViewRequest
+from app.utils.file_utils import secure_filename
 from datetime import datetime
 
 
@@ -658,6 +659,168 @@ async def vr_tutorial():
     with open(tutorial_path, "r", encoding="utf-8") as f:
         content = f.read()
     return HTMLResponse(content=content)
+
+
+# ============ USER BRANCH SOLIDS API ============
+
+def _safe_user_dirname(user_email: str) -> str:
+    return secure_filename(user_email.replace("@", "_at_"))
+
+
+@router.post("/api/branch-solids/save")
+async def save_branch_solid(
+    model_file: UploadFile = File(...),
+    name: str = Form("combined_branches"),
+    source_job_id: str = Form(""),
+    access_token: Optional[str] = Cookie(None)
+):
+    """
+    Save a user-generated combined branch solid (PLY/GLB/OBJ) to the current user's account storage.
+    """
+    user = get_current_user(access_token)
+    if not user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    if not model_file.filename:
+        raise HTTPException(status_code=400, detail="No model file provided")
+
+    ext = os.path.splitext(model_file.filename)[1].lower()
+    if ext not in {".ply", ".glb", ".obj"}:
+        raise HTTPException(status_code=400, detail="Unsupported model format. Use .ply, .glb, or .obj")
+
+    safe_user = _safe_user_dirname(user)
+    safe_name = secure_filename(name.strip() or "combined_branches")
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    stored_filename = f"{safe_name}_{ts}{ext}"
+
+    user_assets_dir = os.path.join(PROCESSED_FOLDER, "user_assets", safe_user, "branch_solids")
+    os.makedirs(user_assets_dir, exist_ok=True)
+
+    local_file_path = os.path.join(user_assets_dir, stored_filename)
+    with open(local_file_path, "wb") as f:
+        f.write(await model_file.read())
+
+    meta = {
+        "name": safe_name,
+        "filename": stored_filename,
+        "source_job_id": source_job_id,
+        "user_email": user,
+        "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "storage": "local"
+    }
+    meta_path = os.path.join(user_assets_dir, f"{stored_filename}.json")
+    try:
+        with open(meta_path, "w", encoding="utf-8") as mf:
+            json.dump(meta, mf, indent=2)
+    except Exception:
+        pass
+
+    cloud_path = None
+    if supabase and SUPABASE_BUCKET:
+        try:
+            cloud_path = f"user_assets/{safe_user}/branch_solids/{stored_filename}"
+            with open(local_file_path, "rb") as f:
+                supabase.storage.from_(SUPABASE_BUCKET).upload(
+                    path=cloud_path,
+                    file=f,
+                    file_options={"content-type": "application/octet-stream", "upsert": "true"}
+                )
+            meta["storage"] = "supabase"
+        except Exception as e:
+            print(f"Warning: branch solid uploaded locally but cloud upload failed: {e}")
+
+    return {
+        "success": True,
+        "filename": stored_filename,
+        "name": safe_name,
+        "source_job_id": source_job_id,
+        "created_at": meta["created_at"],
+        "download_url": f"/api/branch-solids/{stored_filename}",
+        "cloud_path": cloud_path
+    }
+
+
+@router.get("/api/branch-solids")
+async def list_branch_solids(access_token: Optional[str] = Cookie(None)):
+    """List branch solid assets saved by the current user."""
+    user = get_current_user(access_token)
+    if not user:
+        return []
+
+    safe_user = _safe_user_dirname(user)
+    user_assets_dir = os.path.join(PROCESSED_FOLDER, "user_assets", safe_user, "branch_solids")
+    if not os.path.exists(user_assets_dir):
+        return []
+
+    items = []
+    for name in os.listdir(user_assets_dir):
+        if not name.lower().endswith((".ply", ".glb", ".obj")):
+            continue
+        fp = os.path.join(user_assets_dir, name)
+        if not os.path.isfile(fp):
+            continue
+        ctime = datetime.fromtimestamp(os.path.getctime(fp)).strftime("%Y-%m-%d %H:%M:%S")
+        items.append({
+            "filename": name,
+            "download_url": f"/api/branch-solids/{name}",
+            "created_at": ctime,
+            "size_bytes": os.path.getsize(fp)
+        })
+
+    items.sort(key=lambda x: x["created_at"], reverse=True)
+    return items
+
+
+@router.get("/api/branch-solids/{asset_name}")
+async def download_branch_solid(asset_name: str, access_token: Optional[str] = Cookie(None)):
+    """Download a branch solid asset owned by the current user."""
+    user = get_current_user(access_token)
+    if not user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    safe_asset = secure_filename(os.path.basename(asset_name))
+    safe_user = _safe_user_dirname(user)
+    user_assets_dir = os.path.join(PROCESSED_FOLDER, "user_assets", safe_user, "branch_solids")
+    file_path = os.path.join(user_assets_dir, safe_asset)
+
+    if not os.path.exists(file_path) or not os.path.isfile(file_path):
+        raise HTTPException(status_code=404, detail="Asset not found")
+
+    return FileResponse(file_path, filename=safe_asset)
+
+
+@router.delete("/api/branch-solids/{asset_name}")
+async def delete_branch_solid(asset_name: str, access_token: Optional[str] = Cookie(None)):
+    """Delete a branch solid asset owned by the current user."""
+    user = get_current_user(access_token)
+    if not user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    safe_asset = secure_filename(os.path.basename(asset_name))
+    safe_user = _safe_user_dirname(user)
+    user_assets_dir = os.path.join(PROCESSED_FOLDER, "user_assets", safe_user, "branch_solids")
+    file_path = os.path.join(user_assets_dir, safe_asset)
+    meta_path = f"{file_path}.json"
+
+    if not os.path.exists(file_path) or not os.path.isfile(file_path):
+        raise HTTPException(status_code=404, detail="Asset not found")
+
+    try:
+        os.remove(file_path)
+        if os.path.exists(meta_path):
+            os.remove(meta_path)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Could not delete local asset: {e}")
+
+    if supabase and SUPABASE_BUCKET:
+        try:
+            cloud_path = f"user_assets/{safe_user}/branch_solids/{safe_asset}"
+            supabase.storage.from_(SUPABASE_BUCKET).remove([cloud_path])
+        except Exception as e:
+            # Local delete succeeded, so keep operation successful even if cloud cleanup fails.
+            print(f"Warning: branch solid local delete succeeded but cloud delete failed: {e}")
+
+    return {"success": True, "filename": safe_asset}
 
 
 __all__ = ['router']

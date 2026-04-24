@@ -6,6 +6,7 @@ import psycopg2
 from app.config import config
 
 
+
 def get_db():
     """
     Get PostgreSQL database connection
