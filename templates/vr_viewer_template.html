@@ -1926,6 +1926,70 @@
         #tutorial-launch-btn:hover::after {
             content: '';
         }
+
+        /* ====== VR SHARP DESKTOP-LIKE UI OVERRIDES ====== */
+        .vr-header,
+        .vr-main-tabs-header,
+        .vr-tabs-header,
+        .vr-tab-content,
+        .profile-popup,
+        .nav-ring,
+        .nav-pegman,
+        .nav-zoom-control {
+            border-radius: 2px;
+            box-shadow: none;
+        }
+
+        .vr-header {
+            backdrop-filter: none;
+            -webkit-backdrop-filter: none;
+            border-bottom: 1px solid var(--control-border);
+        }
+
+        .vr-main-tabs-header,
+        .vr-tabs-header {
+            background: var(--bg-tabs);
+        }
+
+        .vr-main-tab-btn,
+        .vr-tab-btn,
+        .vr-subtabs-close-btn,
+        .vr-header .header-btn,
+        .profile-icon-btn,
+        .vr-close-modal-btn,
+        .btn-small,
+        .vr-inline-tab-btn,
+        .ruler-tab-btn {
+            border-radius: 2px;
+            box-shadow: none;
+        }
+
+        .vr-tab-content {
+            background: var(--bg-modal);
+            border: 1px solid var(--control-border);
+            backdrop-filter: none;
+            -webkit-backdrop-filter: none;
+            padding: 16px;
+        }
+
+        .vr-tab-content .control-group,
+        .ruler-content {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 2px;
+        }
+
+        .vr-modal-title {
+            border-bottom: 1px solid var(--control-border);
+        }
+
+        .vr-modal-backdrop {
+            background: rgba(0, 0, 0, 0.16);
+        }
+
+        .profile-popup {
+            overflow: hidden;
+        }
     </style>
 </head>
 
@@ -2364,8 +2428,6 @@
                 View</button>
             <button class="btn-small" onclick="toggleBirdEye()" style="background: #8b5cf6; flex: 1;">VR Bird's
                 Eye</button>
-            <button class="btn-small" onclick="resetPosition()" style="background: #ef4444; flex: 1; width: 100%;">Reset
-                View</button>
         </div>
 
         <div class="control-group-title" style="margin-top: 15px; font-size: 11px; color: #60a5fa;">QUICK DIRECTIONS
@@ -2476,6 +2538,17 @@
                     <div class="slider-label"><span>Mesh Opacity:</span><span id="meshOpacityValue">1.0</span></div>
                     <input type="range" id="meshOpacitySlider" min="0.1" max="1" step="0.1" value="1.0">
                 </div>
+                <div class="slider-container">
+                    <div class="slider-label"><span>Mesh Brightness:</span><span id="meshBrightnessValue">1.0</span></div>
+                    <input type="range" id="meshBrightnessSlider" min="0.2" max="3.0" step="0.05" value="1.0">
+                </div>
+                <div class="slider-container">
+                    <div class="slider-label"><span>Mesh Color & Opacity:</span></div>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <input type="color" id="meshColorPicker" value="#ffffff" style="width: 50px; height: 32px; cursor: pointer; border: 1px solid #555; border-radius: 4px;">
+                        <span style="font-size: 10px; color: #aaa;">Pick color (applies with opacity)</span>
+                    </div>
+                </div>
 
                 <div class="control-group-title" style="margin-top: 10px; font-size: 11px; color: #4CAF50;">GEOGRAPHIC ALIGNMENT</div>
                 <div class="slider-container">
@@ -2523,6 +2596,24 @@
                     <div class="slider-label"><span>Rotate Z:</span><span id="meshRotZValue">0</span>°</div>
                     <input type="range" id="meshRotZSlider" min="0" max="360" step="1" value="0">
                 </div>
+
+                <div class="control-group-title" style="margin-top: 10px; font-size: 11px; color: #22d3ee;">4-POINT GEO ALIGN (LOGIN SAVE)</div>
+                <div style="font-size: 10px; color: #9ca3af; margin-bottom: 6px; line-height: 1.35;">
+                    For non geo-referenced cloud meshes: pick 4 points on cloud mesh first, then 4 matching points on geo-referenced data, apply fit, then save.
+                </div>
+                <div style="display: flex; gap: 6px; margin-top: 6px;">
+                    <button class="btn-small" onclick="startCloudMeshGeoAlign()" style="flex: 1; background: #0ea5e9; color: #fff;">Start 2-Phase Pick</button>
+                    <button class="btn-small" onclick="undoCloudMeshGeoAlignPoint()" style="flex: 1; background: #f59e0b; color: #111827;">Undo Point</button>
+                    <button class="btn-small" onclick="applyCloudMeshGeoAlign()" style="flex: 1; background: #22c55e; color: #052e16; font-weight: 700;">Apply Fit</button>
+                    <button class="btn-small" onclick="clearCloudMeshGeoAlign()" style="flex: 1;">Clear Picks</button>
+                </div>
+                <div style="display: flex; gap: 6px; margin-top: 6px;">
+                    <button class="btn-small" onclick="undoCloudMeshFit()" style="flex: 1; background: #f59e0b; color: #111827; font-weight: 700;">Undo Fit</button>
+                    <button class="btn-small" onclick="saveCloudMeshGeoAlign()" style="flex: 1; background: #14b8a6; color: #042f2e; font-weight: 700;">Save Alignment</button>
+                    <button class="btn-small" onclick="loadCloudMeshGeoAlign()" style="flex: 1; background: #6366f1; color: #fff;">Load Saved</button>
+                    <button class="btn-small" onclick="deleteCloudMeshGeoAlign()" style="flex: 1;">Delete Saved</button>
+                </div>
+                <div id="cloudMeshGeoAlignStatus" style="font-size: 10px; color: #67e8f9; margin-top: 6px;">Geo align inactive</div>
             </div>
         </div>
 
@@ -4213,6 +4304,7 @@
         import { PLYLoader } from 'three/addons/loaders/PLYLoader.js';
         import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
         import { MeshoptDecoder } from 'meshopt';
 
         // ============ COLLABORATION WEBSOCKET ============
@@ -8375,6 +8467,9 @@
         const plyLoader = new PLYLoader();
         const objLoader = new OBJLoader();
         const gltfLoader = new GLTFLoader();
+        const dracoLoader = new DRACOLoader();
+        dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
+        gltfLoader.setDRACOLoader(dracoLoader);
         gltfLoader.setMeshoptDecoder(MeshoptDecoder);
 
         // AI Assistant Assistant Guide Vars
@@ -13476,9 +13571,827 @@
         let cloudMeshGroup = new THREE.Group(); 
         surveyAssembly.add(cloudMeshGroup); 
 
+        let loadedCloudMeshKey = '';
+        let cloudMeshBrightness = 1.0;
+        const cloudMeshGeoAlignState = {
+            active: false,
+            phase: 'idle',
+            sourceLocalPoints: [],
+            targetWorldPoints: [],
+            sourceMarkers: [],
+            targetMarkers: [],
+            sourceLine: null,
+            targetLine: null,
+            lastApplied: null,
+            transformHistory: [],
+            maxPoints: 4
+        };
+
         // Store mesh bounding box for scaling (for auto-fit)
         let cloudMeshNativeSize = { width: 1, height: 1 }; // Renamed
         let mapTileSize = { width: 0, height: 0 }; // Store map tile coverage in meters
+
+        function setCloudMeshGeoAlignStatus(text, color) {
+            const el = document.getElementById('cloudMeshGeoAlignStatus');
+            if (!el) return;
+            el.textContent = text;
+            if (color) el.style.color = color;
+        }
+
+        function cloudMeshGeoAlignCanRestoreControls() {
+            return !window.isRulerActive && !drawState.enabled && !pipeLassoState.active && !solidBranchDrawState.active;
+        }
+
+        function cloneCloudMeshTransform() {
+            if (!cloudMeshGroup) return null;
+            return {
+                position: cloudMeshGroup.position.clone(),
+                rotation: cloudMeshGroup.rotation.clone(),
+                scale: cloudMeshGroup.scale.clone()
+            };
+        }
+
+        function pushCloudMeshTransformHistory() {
+            const snapshot = cloneCloudMeshTransform();
+            if (!snapshot) return;
+            cloudMeshGeoAlignState.transformHistory.push(snapshot);
+            if (cloudMeshGeoAlignState.transformHistory.length > 10) {
+                cloudMeshGeoAlignState.transformHistory.shift();
+            }
+        }
+
+        function restoreCloudMeshTransform(snapshot) {
+            if (!snapshot || !cloudMeshGroup) return false;
+            cloudMeshGroup.position.copy(snapshot.position);
+            cloudMeshGroup.rotation.copy(snapshot.rotation);
+            cloudMeshGroup.scale.copy(snapshot.scale);
+            syncCloudMeshTransformInputs();
+            return true;
+        }
+
+        function syncCloudMeshTransformInputs() {
+            if (!cloudMeshGroup) return;
+            const setNum = (id, val, digits = 1) => {
+                const el = document.getElementById(id);
+                if (el) el.textContent = Number(val).toFixed(digits);
+            };
+            const setInput = (id, val, digits = 1) => {
+                const el = document.getElementById(id);
+                if (el) el.value = Number(val).toFixed(digits);
+            };
+            const setSlider = (id, val) => {
+                const el = document.getElementById(id);
+                if (el) el.value = String(val);
+            };
+
+            setNum('meshPosXValue', cloudMeshGroup.position.x, 1);
+            setNum('meshPosYValue', cloudMeshGroup.position.y, 1);
+            setNum('meshPosZValue', cloudMeshGroup.position.z, 1);
+            setInput('meshPosXInput', cloudMeshGroup.position.x, 1);
+            setInput('meshPosYInput', cloudMeshGroup.position.y, 1);
+            setInput('meshPosZInput', cloudMeshGroup.position.z, 1);
+            setSlider('meshPosXSlider', cloudMeshGroup.position.x);
+            setSlider('meshPosYSlider', cloudMeshGroup.position.y);
+            setSlider('meshPosZSlider', cloudMeshGroup.position.z);
+
+            const rotXDeg = THREE.MathUtils.radToDeg(cloudMeshGroup.rotation.x);
+            const rotYDeg = THREE.MathUtils.radToDeg(cloudMeshGroup.rotation.y);
+            const rotZDeg = THREE.MathUtils.radToDeg(cloudMeshGroup.rotation.z);
+            setNum('meshRotXValue', rotXDeg, 0);
+            setNum('meshRotYValue', rotYDeg, 0);
+            setNum('meshRotZValue', rotZDeg, 0);
+            setSlider('meshRotXSlider', rotXDeg);
+            setSlider('meshRotYSlider', rotYDeg);
+            setSlider('meshRotZSlider', rotZDeg);
+
+            const geo = gridPointToGeo(cloudMeshGroup.position.x, cloudMeshGroup.position.y, cloudMeshGroup.position.z);
+            const latEl = document.getElementById('cloudAbsLat');
+            const lonEl = document.getElementById('cloudAbsLon');
+            if (latEl) latEl.value = geo.lat.toFixed(7);
+            if (lonEl) lonEl.value = geo.lon.toFixed(7);
+        }
+
+        function applyCloudMeshBrightness(value) {
+            const brightness = Math.max(0.2, Math.min(3.0, Number(value) || 1.0));
+            cloudMeshBrightness = brightness;
+            const label = document.getElementById('meshBrightnessValue');
+            const slider = document.getElementById('meshBrightnessSlider');
+            if (label) label.textContent = brightness.toFixed(2);
+            if (slider && slider.value !== String(brightness)) slider.value = String(brightness);
+
+            if (!cloudMeshGroup) return;
+
+            cloudMeshGroup.traverse((child) => {
+                if (!child || !child.isMesh || !child.material) return;
+                const materials = Array.isArray(child.material) ? child.material : [child.material];
+                materials.forEach((mat) => {
+                    if (!mat) return;
+                    if (!mat.userData) mat.userData = {};
+                    
+                    // Store base color and emissive on first call
+                    if (mat.userData.baseColorHex == null && mat.color && mat.color.isColor) {
+                        mat.userData.baseColorHex = mat.color.getHex();
+                    }
+                    if (mat.userData.baseEmissiveIntensity == null && Number.isFinite(mat.emissiveIntensity)) {
+                        mat.userData.baseEmissiveIntensity = mat.emissiveIntensity;
+                    }
+                    
+                    // Always restore base color (preserve RGB)
+                    if (mat.color && mat.color.isColor && mat.userData.baseColorHex != null) {
+                        mat.color.setHex(mat.userData.baseColorHex);
+                        // For darker brightness, reduce color intensity
+                        if (brightness < 1) {
+                            mat.color.multiplyScalar(brightness);
+                        }
+                    }
+                    
+                    // Control brightness via emissive intensity only (no color change)
+                    if (Number.isFinite(mat.emissiveIntensity)) {
+                        const baseIntensity = mat.userData.baseEmissiveIntensity || 0;
+                        // Increase emissive intensity for brightness > 1
+                        const boost = brightness > 1 ? (brightness - 1) * 1.5 : 0;
+                        mat.emissiveIntensity = baseIntensity + boost;
+                    }
+                    
+                    mat.needsUpdate = true;
+                });
+            });
+        }
+
+        function applyCloudMeshColor(hexColor) {
+            if (!cloudMeshGroup || !hexColor) return;
+
+            const opacitySlider = document.getElementById('meshOpacitySlider');
+            const opacity = opacitySlider ? parseFloat(opacitySlider.value) : 1.0;
+            const color = new THREE.Color(hexColor);
+
+            cloudMeshGroup.traverse((child) => {
+                if (!child || !child.isMesh || !child.material) return;
+                const materials = Array.isArray(child.material) ? child.material : [child.material];
+                materials.forEach((mat) => {
+                    if (!mat || !mat.color) return;
+                    if (!mat.userData) mat.userData = {};
+                    
+                    // Store original color on first call
+                    if (mat.userData.baseColorHex == null && mat.color.isColor) {
+                        mat.userData.baseColorHex = mat.color.getHex();
+                    }
+                    
+                    // Apply selected color with opacity
+                    mat.color.copy(color);
+                    mat.transparent = opacity < 1;
+                    mat.opacity = opacity;
+                    mat.needsUpdate = true;
+                });
+            });
+        }
+
+        function clearCloudMeshGeoAlignVisuals() {
+            cloudMeshGeoAlignState.sourceMarkers.forEach(marker => {
+                if (marker && marker.parent) marker.parent.remove(marker);
+            });
+            cloudMeshGeoAlignState.targetMarkers.forEach(marker => {
+                if (marker && marker.parent) marker.parent.remove(marker);
+            });
+            cloudMeshGeoAlignState.sourceMarkers = [];
+            cloudMeshGeoAlignState.targetMarkers = [];
+
+            const lines = [cloudMeshGeoAlignState.sourceLine, cloudMeshGeoAlignState.targetLine];
+            lines.forEach(line => {
+                if (!line) return;
+                if (line.parent) line.parent.remove(line);
+                if (line.geometry) line.geometry.dispose();
+                if (line.material) line.material.dispose();
+            });
+            cloudMeshGeoAlignState.sourceLine = null;
+            cloudMeshGeoAlignState.targetLine = null;
+        }
+
+        function rebuildCloudMeshGeoAlignPolyline(points, color, fieldName) {
+            const oldLine = cloudMeshGeoAlignState[fieldName];
+            if (oldLine) {
+                if (oldLine.parent) oldLine.parent.remove(oldLine);
+                if (oldLine.geometry) oldLine.geometry.dispose();
+                if (oldLine.material) oldLine.material.dispose();
+                cloudMeshGeoAlignState[fieldName] = null;
+            }
+
+            if (!Array.isArray(points) || points.length < 2) return;
+            const pts = points.map(p => new THREE.Vector3(p.x, p.y + 0.03, p.z));
+            if (points.length >= cloudMeshGeoAlignState.maxPoints) {
+                pts.push(new THREE.Vector3(points[0].x, points[0].y + 0.03, points[0].z));
+            }
+            const geom = new THREE.BufferGeometry().setFromPoints(pts);
+            const mat = new THREE.LineBasicMaterial({ color, linewidth: 2 });
+            const line = new THREE.Line(geom, mat);
+            scene.add(line);
+            cloudMeshGeoAlignState[fieldName] = line;
+        }
+
+        function addCloudMeshGeoAlignSourcePoint(hitInfo) {
+            cloudMeshGeoAlignState.sourceLocalPoints.push(hitInfo.local.clone());
+            const marker = new THREE.Mesh(
+                new THREE.SphereGeometry(0.09, 16, 16),
+                new THREE.MeshBasicMaterial({ color: 0xf59e0b })
+            );
+            marker.position.copy(hitInfo.world);
+            scene.add(marker);
+            cloudMeshGeoAlignState.sourceMarkers.push(marker);
+
+            const worldPts = cloudMeshGeoAlignState.sourceMarkers.map(m => m.position);
+            rebuildCloudMeshGeoAlignPolyline(worldPts, 0xf59e0b, 'sourceLine');
+
+            const n = cloudMeshGeoAlignState.sourceLocalPoints.length;
+            if (n < cloudMeshGeoAlignState.maxPoints) {
+                setCloudMeshGeoAlignStatus(`Source pick ${n}/4 on cloud mesh.`, '#fcd34d');
+                return;
+            }
+
+            cloudMeshGeoAlignState.phase = 'target';
+            setCloudMeshGeoAlignStatus('Source 4/4 done. Now pick 4 matching geo points.', '#67e8f9');
+        }
+
+        function addCloudMeshGeoAlignTargetPoint(worldPoint) {
+            cloudMeshGeoAlignState.targetWorldPoints.push(worldPoint.clone());
+            const marker = new THREE.Mesh(
+                new THREE.SphereGeometry(0.09, 16, 16),
+                new THREE.MeshBasicMaterial({ color: 0x22d3ee })
+            );
+            marker.position.copy(worldPoint);
+            scene.add(marker);
+            cloudMeshGeoAlignState.targetMarkers.push(marker);
+
+            const worldPts = cloudMeshGeoAlignState.targetMarkers.map(m => m.position);
+            rebuildCloudMeshGeoAlignPolyline(worldPts, 0x22d3ee, 'targetLine');
+
+            const n = cloudMeshGeoAlignState.targetWorldPoints.length;
+            if (n < cloudMeshGeoAlignState.maxPoints) {
+                setCloudMeshGeoAlignStatus(`Target pick ${n}/4 on geo data.`, '#67e8f9');
+            } else {
+                setCloudMeshGeoAlignStatus('Target 4/4 done. Click Apply Fit.', '#86efac');
+            }
+        }
+
+        function getActiveCloudMeshKey() {
+            if (loadedCloudMeshKey) return loadedCloudMeshKey;
+            const input = document.getElementById('meshInput');
+            const raw = input && input.value ? String(input.value).trim() : '';
+            return raw || '';
+        }
+
+        function pickCloudMeshPointFromClient(clientX, clientY) {
+            if (!camera || !raycaster || !renderer || !renderer.domElement || !cloudMeshGroup) return null;
+            const rect = renderer.domElement.getBoundingClientRect();
+            const ndcX = ((clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1;
+            const ndcY = -(((clientY - rect.top) / Math.max(1, rect.height)) * 2 - 1);
+            raycaster.setFromCamera({ x: ndcX, y: ndcY }, camera);
+
+            const hits = raycaster.intersectObject(cloudMeshGroup, true);
+            if (!hits || !hits.length) return null;
+
+            const first = hits.find(h => h && h.point && h.object && h.object.visible !== false) || hits[0];
+            if (!first || !first.point) return null;
+
+            const world = first.point.clone();
+            const local = cloudMeshGroup.worldToLocal(world.clone());
+            return { world, local };
+        }
+
+        function geoPointToWorld(geoPt) {
+            if (!geoPt || !Number.isFinite(geoPt.lat) || !Number.isFinite(geoPt.lon)) return null;
+            const m = latLonToMeters({ lat: geoPt.lat, lon: geoPt.lon }, mapOrigin);
+            const y = (Number(geoPt.alt) || 0) - (mapOrigin.alt || 0);
+            return new THREE.Vector3(m.x, y, m.z);
+        }
+
+        function applyCloudMeshTransformFromHint(transformHint) {
+            if (!transformHint || !transformHint.position_geo || !transformHint.rotation || !transformHint.scale) return false;
+
+            const worldPos = geoPointToWorld(transformHint.position_geo);
+            if (!worldPos) return false;
+
+            const rx = Number(transformHint.rotation.x);
+            const ry = Number(transformHint.rotation.y);
+            const rz = Number(transformHint.rotation.z);
+            const sx = Number(transformHint.scale.x);
+            const sy = Number(transformHint.scale.y);
+            const sz = Number(transformHint.scale.z);
+
+            if (!Number.isFinite(rx) || !Number.isFinite(ry) || !Number.isFinite(rz) ||
+                !Number.isFinite(sx) || !Number.isFinite(sy) || !Number.isFinite(sz)) {
+                return false;
+            }
+
+            pushCloudMeshTransformHistory();
+            cloudMeshGroup.position.copy(worldPos);
+            cloudMeshGroup.rotation.set(rx, ry, rz);
+            cloudMeshGroup.scale.set(sx, sy, sz);
+            syncCloudMeshTransformInputs();
+            return true;
+        }
+
+        function computeSimilarity2D(sourcePts, targetPts) {
+            if (!Array.isArray(sourcePts) || !Array.isArray(targetPts) || sourcePts.length !== targetPts.length || sourcePts.length < 2) {
+                return null;
+            }
+
+            let srcCx = 0, srcCy = 0, dstCx = 0, dstCy = 0;
+            sourcePts.forEach(p => { srcCx += p.x; srcCy += p.y; });
+            targetPts.forEach(p => { dstCx += p.x; dstCy += p.y; });
+            const n = sourcePts.length;
+            srcCx /= n; srcCy /= n; dstCx /= n; dstCy /= n;
+
+            let a = 0, b = 0, den = 0;
+            for (let i = 0; i < n; i++) {
+                const sx = sourcePts[i].x - srcCx;
+                const sy = sourcePts[i].y - srcCy;
+                const tx = targetPts[i].x - dstCx;
+                const ty = targetPts[i].y - dstCy;
+                a += sx * tx + sy * ty;
+                b += sx * ty - sy * tx;
+                den += sx * sx + sy * sy;
+            }
+            if (!Number.isFinite(den) || den <= 1e-12) return null;
+
+            const scale = Math.sqrt(a * a + b * b) / den;
+            if (!Number.isFinite(scale) || scale <= 1e-9) return null;
+
+            const theta = Math.atan2(b, a);
+            const ct = Math.cos(theta);
+            const st = Math.sin(theta);
+            const tx = dstCx - scale * (ct * srcCx - st * srcCy);
+            const ty = dstCy - scale * (st * srcCx + ct * srcCy);
+
+            return { scale, theta, tx, ty };
+        }
+
+        function computeAnisotropicSimilarity2D(sourcePts, targetPts, thetaSeed = 0) {
+            if (!Array.isArray(sourcePts) || !Array.isArray(targetPts) || sourcePts.length !== targetPts.length || sourcePts.length < 2) {
+                return null;
+            }
+
+            const n = sourcePts.length;
+            let srcCx = 0, srcCy = 0, dstCx = 0, dstCy = 0;
+            sourcePts.forEach(p => { srcCx += p.x; srcCy += p.y; });
+            targetPts.forEach(p => { dstCx += p.x; dstCy += p.y; });
+            srcCx /= n; srcCy /= n; dstCx /= n; dstCy /= n;
+
+            const srcC = sourcePts.map(p => ({ x: p.x - srcCx, y: p.y - srcCy }));
+            const dstC = targetPts.map(p => ({ x: p.x - dstCx, y: p.y - dstCy }));
+
+            const evalTheta = (theta) => {
+                const ct = Math.cos(theta);
+                const st = Math.sin(theta);
+                let numX = 0, denX = 0, numY = 0, denY = 0;
+
+                for (let i = 0; i < n; i++) {
+                    const sx = srcC[i].x;
+                    const sy = srcC[i].y;
+                    const rx = ct * sx - st * sy;
+                    const ry = st * sx + ct * sy;
+                    const tx = dstC[i].x;
+                    const ty = dstC[i].y;
+                    numX += rx * tx;
+                    denX += rx * rx;
+                    numY += ry * ty;
+                    denY += ry * ry;
+                }
+
+                if (denX <= 1e-12 || denY <= 1e-12) return null;
+                const scaleX = numX / denX;
+                const scaleY = numY / denY;
+                if (!Number.isFinite(scaleX) || !Number.isFinite(scaleY)) return null;
+
+                const tX = dstCx - scaleX * (ct * srcCx - st * srcCy);
+                const tY = dstCy - scaleY * (st * srcCx + ct * srcCy);
+
+                let sse = 0;
+                for (let i = 0; i < n; i++) {
+                    const sx = sourcePts[i].x;
+                    const sy = sourcePts[i].y;
+                    const px = scaleX * (ct * sx - st * sy) + tX;
+                    const py = scaleY * (st * sx + ct * sy) + tY;
+                    const dx = px - targetPts[i].x;
+                    const dy = py - targetPts[i].y;
+                    sse += dx * dx + dy * dy;
+                }
+
+                return { theta, scaleX, scaleY, tx: tX, ty: tY, sse };
+            };
+
+            let best = evalTheta(thetaSeed) || evalTheta(0);
+            if (!best) return null;
+
+            // Coarse-to-fine search for angle that minimizes reprojection error.
+            let halfRange = 0.45;
+            for (let pass = 0; pass < 3; pass++) {
+                const steps = 120;
+                const step = (halfRange * 2) / steps;
+                for (let i = 0; i <= steps; i++) {
+                    const theta = best.theta - halfRange + (i * step);
+                    const cand = evalTheta(theta);
+                    if (cand && cand.sse < best.sse) best = cand;
+                }
+                halfRange *= 0.25;
+            }
+
+            const rms = Math.sqrt(best.sse / Math.max(1, n));
+            return {
+                theta: best.theta,
+                scaleX: best.scaleX,
+                scaleY: best.scaleY,
+                tx: best.tx,
+                ty: best.ty,
+                rms
+            };
+        }
+
+        function computeCloudMeshTransformFromQuad(points) {
+            if (!Array.isArray(points) || points.length < 4) return null;
+
+            const p0 = points[0], p1 = points[1], p2 = points[2], p3 = points[3];
+            const edge01 = new THREE.Vector3().subVectors(p1, p0);
+            const edge23 = new THREE.Vector3().subVectors(p2, p3);
+            const edge03 = new THREE.Vector3().subVectors(p3, p0);
+            const edge12 = new THREE.Vector3().subVectors(p2, p1);
+
+            const width = (edge01.length() + edge23.length()) * 0.5;
+            const depth = (edge03.length() + edge12.length()) * 0.5;
+            if (!Number.isFinite(width) || !Number.isFinite(depth) || width <= 1e-6 || depth <= 1e-6) return null;
+
+            const axisX = edge01.clone().setY(0);
+            if (axisX.lengthSq() <= 1e-10) return null;
+            axisX.normalize();
+
+            const center = new THREE.Vector3();
+            points.forEach(p => center.add(p));
+            center.multiplyScalar(1 / points.length);
+
+            const nativeWidth = Math.max(1e-6, Number(cloudMeshNativeSize.width) || 1);
+            const nativeDepth = Math.max(1e-6, Number(cloudMeshNativeSize.height) || 1);
+            const scaleX = width / nativeWidth;
+            const scaleZ = depth / nativeDepth;
+            const scaleY = (scaleX + scaleZ) * 0.5;
+            const yaw = Math.atan2(axisX.x, axisX.z);
+
+            return {
+                center,
+                yaw,
+                scale: { x: scaleX, y: scaleY, z: scaleZ }
+            };
+        }
+
+        function applyCloudMeshTransformFromCorrespondence(sourceLocalPoints, targetWorldPoints) {
+            if (!Array.isArray(sourceLocalPoints) || !Array.isArray(targetWorldPoints)) return false;
+            if (sourceLocalPoints.length < 4 || targetWorldPoints.length < 4) return false;
+
+            const src2 = sourceLocalPoints.slice(0, 4).map(p => ({ x: p.x, y: p.z }));
+            const dst2 = targetWorldPoints.slice(0, 4).map(p => ({ x: p.x, y: p.z }));
+            const seed = computeSimilarity2D(src2, dst2);
+            const sim = computeAnisotropicSimilarity2D(src2, dst2, seed ? seed.theta : 0);
+            if (!sim) return false;
+
+            pushCloudMeshTransformHistory();
+
+            const srcMeanY = sourceLocalPoints.slice(0, 4).reduce((s, p) => s + p.y, 0) / 4;
+            const dstMeanY = targetWorldPoints.slice(0, 4).reduce((s, p) => s + p.y, 0) / 4;
+            const scaleY = (Math.abs(sim.scaleX) + Math.abs(sim.scaleY)) * 0.5;
+            const posY = dstMeanY - scaleY * srcMeanY;
+
+            cloudMeshGroup.position.set(sim.tx, posY, sim.ty);
+            cloudMeshGroup.rotation.set(0, sim.theta, 0);
+            cloudMeshGroup.scale.set(sim.scaleX, scaleY, sim.scaleY);
+            syncCloudMeshTransformInputs();
+
+            cloudMeshGeoAlignState.lastApplied = {
+                sourceLocalPoints: sourceLocalPoints.slice(0, 4).map(p => ({ x: p.x, y: p.y, z: p.z })),
+                targetGeoPoints: targetWorldPoints.slice(0, 4).map(p => gridPointToGeo(p.x, p.y, p.z)),
+                quality: {
+                    rms2D: Number(sim.rms) || 0
+                }
+            };
+            const rmsText = Number.isFinite(sim.rms) ? sim.rms.toFixed(3) : 'n/a';
+            setCloudMeshGeoAlignStatus(`Fit applied (RMS ${rmsText}m). Save alignment if it looks correct.`, '#86efac');
+            return true;
+        }
+
+        function applyCloudMeshTransformFromQuad(points) {
+            const solved = computeCloudMeshTransformFromQuad(points);
+            if (!solved) return false;
+
+            pushCloudMeshTransformHistory();
+
+            cloudMeshGroup.position.copy(solved.center);
+            cloudMeshGroup.rotation.y = solved.yaw;
+            cloudMeshGroup.scale.set(solved.scale.x, solved.scale.y, solved.scale.z);
+            syncCloudMeshTransformInputs();
+
+            cloudMeshGeoAlignState.lastApplied = {
+                sourceLocalPoints: null,
+                targetGeoPoints: points.map(p => gridPointToGeo(p.x, p.y, p.z))
+            };
+            return true;
+        }
+
+        window.undoCloudMeshFit = function () {
+            const snapshot = cloudMeshGeoAlignState.transformHistory.pop();
+            if (!snapshot) {
+                setCloudMeshGeoAlignStatus('No previous fit to undo.', '#facc15');
+                return;
+            }
+            if (restoreCloudMeshTransform(snapshot)) {
+                setCloudMeshGeoAlignStatus('Restored previous mesh fit.', '#86efac');
+            } else {
+                setCloudMeshGeoAlignStatus('Could not restore previous fit.', '#fca5a5');
+            }
+        };
+
+        window.startCloudMeshGeoAlign = function () {
+            if (!cloudMeshGroup || cloudMeshGroup.children.length === 0) {
+                window.notifyUser('Load a cloud mesh first.');
+                return;
+            }
+            cloudMeshGeoAlignState.active = true;
+            cloudMeshGeoAlignState.phase = 'source';
+            cloudMeshGeoAlignState.sourceLocalPoints = [];
+            cloudMeshGeoAlignState.targetWorldPoints = [];
+            clearCloudMeshGeoAlignVisuals();
+            controls.enabled = false;
+            setCloudMeshGeoAlignStatus('Phase 1/2: pick 4 points on cloud mesh.', '#fcd34d');
+        };
+
+        window.undoCloudMeshGeoAlignPoint = function () {
+            const hasSource = cloudMeshGeoAlignState.sourceLocalPoints.length > 0;
+            const hasTarget = cloudMeshGeoAlignState.targetWorldPoints.length > 0;
+            if (!cloudMeshGeoAlignState.active && !hasSource && !hasTarget) {
+                setCloudMeshGeoAlignStatus('No picked points to undo.', '#facc15');
+                return;
+            }
+
+            if (cloudMeshGeoAlignState.phase === 'target') {
+                if (cloudMeshGeoAlignState.targetWorldPoints.length > 0) {
+                    cloudMeshGeoAlignState.targetWorldPoints.pop();
+                    const marker = cloudMeshGeoAlignState.targetMarkers.pop();
+                    if (marker && marker.parent) marker.parent.remove(marker);
+                    if (marker && marker.geometry) marker.geometry.dispose();
+                    if (marker && marker.material) marker.material.dispose();
+                    const worldPts = cloudMeshGeoAlignState.targetMarkers.map(m => m.position);
+                    rebuildCloudMeshGeoAlignPolyline(worldPts, 0x22d3ee, 'targetLine');
+                    setCloudMeshGeoAlignStatus(`Target pick ${cloudMeshGeoAlignState.targetWorldPoints.length}/4 on geo data.`, '#67e8f9');
+                    return;
+                }
+                cloudMeshGeoAlignState.phase = 'source';
+            }
+
+            if (!cloudMeshGeoAlignState.sourceLocalPoints.length) {
+                setCloudMeshGeoAlignStatus('No picked points to undo.', '#facc15');
+                return;
+            }
+
+            cloudMeshGeoAlignState.sourceLocalPoints.pop();
+            const marker = cloudMeshGeoAlignState.sourceMarkers.pop();
+            if (marker && marker.parent) marker.parent.remove(marker);
+            if (marker && marker.geometry) marker.geometry.dispose();
+            if (marker && marker.material) marker.material.dispose();
+            const worldPts = cloudMeshGeoAlignState.sourceMarkers.map(m => m.position);
+            rebuildCloudMeshGeoAlignPolyline(worldPts, 0xf59e0b, 'sourceLine');
+            setCloudMeshGeoAlignStatus(`Source pick ${cloudMeshGeoAlignState.sourceLocalPoints.length}/4 on cloud mesh.`, '#fcd34d');
+        };
+
+        window.clearCloudMeshGeoAlign = function () {
+            cloudMeshGeoAlignState.active = false;
+            cloudMeshGeoAlignState.phase = 'idle';
+            cloudMeshGeoAlignState.sourceLocalPoints = [];
+            cloudMeshGeoAlignState.targetWorldPoints = [];
+            clearCloudMeshGeoAlignVisuals();
+            controls.enabled = cloudMeshGeoAlignCanRestoreControls();
+            setCloudMeshGeoAlignStatus('Geo align inactive', '#67e8f9');
+        };
+
+        window.applyCloudMeshGeoAlign = function () {
+            if (!cloudMeshGroup || cloudMeshGroup.children.length === 0) {
+                window.notifyUser('Load a cloud mesh first.');
+                return;
+            }
+            if (cloudMeshGeoAlignState.sourceLocalPoints.length < cloudMeshGeoAlignState.maxPoints ||
+                cloudMeshGeoAlignState.targetWorldPoints.length < cloudMeshGeoAlignState.maxPoints) {
+                window.notifyUser('Pick 4 source mesh points and 4 matching geo points before applying fit.');
+                return;
+            }
+            const ok = applyCloudMeshTransformFromCorrespondence(
+                cloudMeshGeoAlignState.sourceLocalPoints,
+                cloudMeshGeoAlignState.targetWorldPoints
+            );
+            if (!ok) {
+                setCloudMeshGeoAlignStatus('Could not compute transform from picked correspondences.', '#fca5a5');
+                return;
+            }
+            cloudMeshGeoAlignState.active = false;
+            cloudMeshGeoAlignState.phase = 'idle';
+            controls.enabled = cloudMeshGeoAlignCanRestoreControls();
+            setCloudMeshGeoAlignStatus('Correspondence fit applied. Save alignment to persist for your login.', '#86efac');
+        };
+
+        window.saveCloudMeshGeoAlign = async function () {
+            const meshKey = getActiveCloudMeshKey();
+            if (!meshKey) {
+                window.notifyUser('Select or load a cloud mesh first.');
+                return;
+            }
+
+            if (!cloudMeshGeoAlignState.lastApplied ||
+                !Array.isArray(cloudMeshGeoAlignState.lastApplied.sourceLocalPoints) ||
+                cloudMeshGeoAlignState.lastApplied.sourceLocalPoints.length < 4 ||
+                !Array.isArray(cloudMeshGeoAlignState.lastApplied.targetGeoPoints) ||
+                cloudMeshGeoAlignState.lastApplied.targetGeoPoints.length < 4) {
+                window.notifyUser('Apply correspondence fit first, then save alignment.');
+                return;
+            }
+
+            const payload = {
+                mesh_key: meshKey,
+                alignment: {
+                    version: 2,
+                    method: 'four_point_correspondence',
+                    source_local_points: cloudMeshGeoAlignState.lastApplied.sourceLocalPoints,
+                    target_geo_points: cloudMeshGeoAlignState.lastApplied.targetGeoPoints,
+                    native_size: {
+                        width: Number(cloudMeshNativeSize.width) || 1,
+                        depth: Number(cloudMeshNativeSize.height) || 1
+                    },
+                    transform_hint: {
+                        position_geo: gridPointToGeo(cloudMeshGroup.position.x, cloudMeshGroup.position.y, cloudMeshGroup.position.z),
+                        rotation: {
+                            x: cloudMeshGroup.rotation.x,
+                            y: cloudMeshGroup.rotation.y,
+                            z: cloudMeshGroup.rotation.z
+                        },
+                        scale: {
+                            x: cloudMeshGroup.scale.x,
+                            y: cloudMeshGroup.scale.y,
+                            z: cloudMeshGroup.scale.z
+                        }
+                    }
+                }
+            };
+
+            try {
+                const res = await fetch('/api/mesh-alignment', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (res.status === 401) {
+                    window.notifyUser('Please login to save mesh alignment.');
+                    return;
+                }
+                const data = await res.json();
+                if (!res.ok || !data.success) {
+                    throw new Error((data && data.error) ? data.error : 'Failed to save alignment');
+                }
+                setCloudMeshGeoAlignStatus('Alignment saved for your login.', '#86efac');
+            } catch (err) {
+                setCloudMeshGeoAlignStatus('Failed to save alignment.', '#fca5a5');
+                console.error('saveCloudMeshGeoAlign failed:', err);
+            }
+        };
+
+        window.loadCloudMeshGeoAlign = async function () {
+            const meshKey = getActiveCloudMeshKey();
+            if (!meshKey) {
+                window.notifyUser('Select or load a cloud mesh first.');
+                return;
+            }
+            try {
+                const res = await fetch(`/api/mesh-alignment?mesh_key=${encodeURIComponent(meshKey)}`);
+                if (res.status === 401) {
+                    window.notifyUser('Please login to load saved mesh alignment.');
+                    return;
+                }
+                const data = await res.json();
+                if (!res.ok || !data.success) {
+                    throw new Error((data && data.error) ? data.error : 'Failed to load alignment');
+                }
+
+                const alignment = data.alignment;
+                if (!alignment) {
+                    setCloudMeshGeoAlignStatus('No saved alignment found for this mesh.', '#facc15');
+                    return;
+                }
+
+                if (alignment.native_size && Number.isFinite(alignment.native_size.width) && Number.isFinite(alignment.native_size.depth)) {
+                    cloudMeshNativeSize.width = Math.max(1e-6, Number(alignment.native_size.width));
+                    cloudMeshNativeSize.height = Math.max(1e-6, Number(alignment.native_size.depth));
+                }
+
+                let ok = false;
+                // Prefer exact saved transform (includes post-fit slider fine-tuning).
+                if (alignment.transform_hint) {
+                    ok = applyCloudMeshTransformFromHint(alignment.transform_hint);
+                }
+
+                if (!ok && alignment.method === 'four_point_correspondence' &&
+                    Array.isArray(alignment.source_local_points) && alignment.source_local_points.length >= 4 &&
+                    Array.isArray(alignment.target_geo_points) && alignment.target_geo_points.length >= 4) {
+                    const sourceLocal = alignment.source_local_points
+                        .slice(0, 4)
+                        .map(p => new THREE.Vector3(Number(p.x) || 0, Number(p.y) || 0, Number(p.z) || 0));
+                    const targetWorld = alignment.target_geo_points
+                        .slice(0, 4)
+                        .map(geoPointToWorld)
+                        .filter(Boolean);
+                    if (targetWorld.length === 4) {
+                        ok = applyCloudMeshTransformFromCorrespondence(sourceLocal, targetWorld);
+                    }
+                } else if (!ok && Array.isArray(alignment.points_geo) && alignment.points_geo.length >= 4) {
+                    // Backward compatibility for previous saved format.
+                    const pointsWorld = alignment.points_geo.slice(0, 4).map(geoPointToWorld).filter(Boolean);
+                    if (pointsWorld.length === 4) ok = applyCloudMeshTransformFromQuad(pointsWorld);
+                }
+
+                if (!ok) {
+                    setCloudMeshGeoAlignStatus('Could not apply saved alignment.', '#fca5a5');
+                    return;
+                }
+
+                setCloudMeshGeoAlignStatus('Saved alignment applied.', '#86efac');
+            } catch (err) {
+                setCloudMeshGeoAlignStatus('Failed to load saved alignment.', '#fca5a5');
+                console.error('loadCloudMeshGeoAlign failed:', err);
+            }
+        };
+
+        window.deleteCloudMeshGeoAlign = async function () {
+            const meshKey = getActiveCloudMeshKey();
+            if (!meshKey) {
+                window.notifyUser('Select or load a cloud mesh first.');
+                return;
+            }
+            try {
+                const res = await fetch(`/api/mesh-alignment?mesh_key=${encodeURIComponent(meshKey)}`, {
+                    method: 'DELETE'
+                });
+                if (res.status === 401) {
+                    window.notifyUser('Please login to delete saved mesh alignment.');
+                    return;
+                }
+                const data = await res.json();
+                if (!res.ok || !data.success) {
+                    throw new Error((data && data.error) ? data.error : 'Failed to delete alignment');
+                }
+                setCloudMeshGeoAlignStatus('Saved alignment deleted.', '#67e8f9');
+            } catch (err) {
+                setCloudMeshGeoAlignStatus('Failed to delete saved alignment.', '#fca5a5');
+                console.error('deleteCloudMeshGeoAlign failed:', err);
+            }
+        };
+
+        window.tryApplySavedCloudMeshAlignment = async function () {
+            const meshKey = getActiveCloudMeshKey();
+            if (!meshKey || !cloudMeshGroup || cloudMeshGroup.children.length === 0) return;
+            try {
+                const res = await fetch(`/api/mesh-alignment?mesh_key=${encodeURIComponent(meshKey)}`);
+                if (!res.ok) return;
+                const data = await res.json();
+                if (!data || !data.success || !data.alignment) return;
+
+                const alignment = data.alignment;
+                if (alignment.native_size && Number.isFinite(alignment.native_size.width) && Number.isFinite(alignment.native_size.depth)) {
+                    cloudMeshNativeSize.width = Math.max(1e-6, Number(alignment.native_size.width));
+                    cloudMeshNativeSize.height = Math.max(1e-6, Number(alignment.native_size.depth));
+                }
+
+                let applied = false;
+                // Prefer exact saved transform (includes post-fit slider fine-tuning).
+                if (alignment.transform_hint) {
+                    applied = applyCloudMeshTransformFromHint(alignment.transform_hint);
+                }
+
+                if (!applied && alignment.method === 'four_point_correspondence' &&
+                    Array.isArray(alignment.source_local_points) && alignment.source_local_points.length >= 4 &&
+                    Array.isArray(alignment.target_geo_points) && alignment.target_geo_points.length >= 4) {
+                    const sourceLocal = alignment.source_local_points
+                        .slice(0, 4)
+                        .map(p => new THREE.Vector3(Number(p.x) || 0, Number(p.y) || 0, Number(p.z) || 0));
+                    const targetWorld = alignment.target_geo_points
+                        .slice(0, 4)
+                        .map(geoPointToWorld)
+                        .filter(Boolean);
+                    if (targetWorld.length === 4) {
+                        applied = applyCloudMeshTransformFromCorrespondence(sourceLocal, targetWorld);
+                    }
+                } else if (!applied && Array.isArray(alignment.points_geo) && alignment.points_geo.length >= 4) {
+                    const pointsWorld = alignment.points_geo.slice(0, 4).map(geoPointToWorld).filter(Boolean);
+                    if (pointsWorld.length === 4) applied = applyCloudMeshTransformFromQuad(pointsWorld);
+                }
+
+                if (applied) {
+                    setCloudMeshGeoAlignStatus('Saved alignment auto-applied for this mesh.', '#86efac');
+                }
+            } catch (_) {
+                // Silent on auto-load.
+            }
+        };
 
         window.setupCloudMeshUI = function() {
             const meshPosXSlider = document.getElementById('meshPosXSlider');
@@ -13489,6 +14402,7 @@
             const meshPosZInput = document.getElementById('meshPosZInput');
             const cloudAbsLatIn = document.getElementById('cloudAbsLat');
             const cloudAbsLonIn = document.getElementById('cloudAbsLon');
+            const meshBrightnessSlider = document.getElementById('meshBrightnessSlider');
 
             const syncCloudAbsCoords = () => {
                 if (!cloudMeshGroup) return;
@@ -13544,6 +14458,13 @@
             if (meshPosXInput) meshPosXInput.oninput = updateCloudFromInputs;
             if (meshPosYInput) meshPosYInput.oninput = updateCloudFromInputs;
             if (meshPosZInput) meshPosZInput.oninput = updateCloudFromInputs;
+            if (meshBrightnessSlider) {
+                meshBrightnessSlider.oninput = (e) => applyCloudMeshBrightness(e.target.value);
+            }
+            const meshColorPicker = document.getElementById('meshColorPicker');
+            if (meshColorPicker) {
+                meshColorPicker.oninput = (e) => applyCloudMeshColor(e.target.value);
+            }
 
             // Initial Defaults
             const defLat = 13.7111356;
@@ -13563,31 +14484,62 @@
             const btn = document.getElementById('btnLoadMesh');
             if (!meshFile) { window.notifyUser('Please select or enter a .glb file path'); return; }
 
-            const loader = new THREE.GLTFLoader();
+            const loader = gltfLoader;
             status.textContent = 'Loading GLB...';
             btn.disabled = true;
 
-            loader.load(`/static/${meshFile}`, (gltf) => {
+            const urlToLoad = meshFile.startsWith('/') || meshFile.startsWith('http') ? meshFile : `/static/${meshFile}`;
+            const fallbackUrl = '/static/model.glb';
+
+            const loadSuccess = (gltf, isFallback) => {
                 const model = gltf.scene;
                 if (cloudMeshGroup.children.length > 0) {
                     while(cloudMeshGroup.children.length > 0) cloudMeshGroup.remove(cloudMeshGroup.children[0]);
                 }
                 cloudMeshGroup.add(model);
-                setupCloudMeshUI();
 
-                status.textContent = "✅ Cloud Mesh Loaded!";
+                const box = new THREE.Box3().setFromObject(model);
+                const size = new THREE.Vector3();
+                box.getSize(size);
+                cloudMeshNativeSize = {
+                    width: Math.max(1e-6, Number(size.x) || 1),
+                    height: Math.max(1e-6, Number(size.z) || 1)
+                };
+
+                applyCloudMeshBrightness(cloudMeshBrightness);
+
+                const meshColorPicker = document.getElementById('meshColorPicker');
+                if (meshColorPicker && meshColorPicker.value) {
+                    applyCloudMeshColor(meshColorPicker.value);
+                }
+
+                loadedCloudMeshKey = meshFile;
+                cloudMeshGeoAlignState.transformHistory = [];
+                setupCloudMeshUI();
+                window.tryApplySavedCloudMeshAlignment();
+
+                status.textContent = isFallback ? "✅ Cloud Mesh (Fallback) Loaded!" : "✅ Cloud Mesh Loaded!";
                 status.style.color = "#10b981";
                 btn.disabled = false;
-            }, (xhr) => {
+            };
+
+            const loadProgress = (xhr) => {
                 if (xhr.lengthComputable && status) {
                     const percent = Math.round((xhr.loaded / xhr.total) * 100);
                     status.textContent = `⌛ Loading Cloud Mesh... ${percent}%`;
                 }
-            }, (err) => {
-                console.error("Cloud Mesh Load Error:", err);
-                status.textContent = "Error loading GLB!";
-                status.style.color = "#ef4444";
-                btn.disabled = false;
+            };
+
+            loader.load(urlToLoad, (gltf) => loadSuccess(gltf, false), loadProgress, (err) => {
+                console.warn(`Primary mesh load failed for ${urlToLoad}. Attempting fallback to ${fallbackUrl}...`, err);
+                status.textContent = '⌛ Attempting static fallback...';
+                
+                loader.load(fallbackUrl, (fallbackGltf) => loadSuccess(fallbackGltf, true), loadProgress, (fallbackErr) => {
+                    console.error("Cloud Mesh Load Error (including fallback):", fallbackErr);
+                    status.textContent = "Error loading GLB!";
+                    status.style.color = "#ef4444";
+                    btn.disabled = false;
+                });
             });
         };
 
@@ -13718,7 +14670,7 @@
             //debug(`Mesh auto-fitted to map: ${mapTileSize.width.toFixed(1)}m × ${mapTileSize.height.toFixed(1)}m`);
         };
 
-        document.getElementById('showMesh').addEventListener('change', (e) => surveyMeshGroup.visible = e.target.checked);
+        document.getElementById('showMesh').addEventListener('change', (e) => cloudMeshGroup.visible = e.target.checked);
 
         window.renderGridManager = renderGridManager;
         window.renderLayerList = renderLayerList;
@@ -13730,7 +14682,7 @@
                 const val = parseFloat(e.target.value);
                 const label = document.getElementById('meshOpacityValue');
                 if (label) label.textContent = val.toFixed(1);
-                surveyMeshGroup.traverse((child) => {
+                cloudMeshGroup.traverse((child) => {
                     if (child.isMesh) {
                         // Clone material if it's shared to avoid affecting other objects
                         if (!child.material.userData.cloned) {
@@ -13763,7 +14715,7 @@
             if (isNaN(val)) return;
             const label = document.getElementById('meshPosXValue');
             if (label) label.textContent = val.toFixed(1);
-            if (surveyMeshGroup) surveyMeshGroup.position.x = val;
+            if (cloudMeshGroup) cloudMeshGroup.position.x = val;
             if (meshPosXSlider) meshPosXSlider.value = val;
             if (meshPosXInput && document.activeElement !== meshPosXInput) meshPosXInput.value = val.toFixed(1);
         }
@@ -13788,7 +14740,7 @@
             if (isNaN(val)) return;
             const label = document.getElementById('meshPosYValue');
             if (label) label.textContent = val.toFixed(1);
-            if (surveyMeshGroup) surveyMeshGroup.position.y = val;
+            if (cloudMeshGroup) cloudMeshGroup.position.y = val;
             if (meshPosYSlider) meshPosYSlider.value = val;
             if (meshPosYInput && document.activeElement !== meshPosYInput) meshPosYInput.value = val.toFixed(1);
         }
@@ -13813,7 +14765,7 @@
             if (isNaN(val)) return;
             const label = document.getElementById('meshPosZValue');
             if (label) label.textContent = val.toFixed(1);
-            if (surveyMeshGroup) surveyMeshGroup.position.z = val;
+            if (cloudMeshGroup) cloudMeshGroup.position.z = val;
             if (meshPosZSlider) meshPosZSlider.value = val;
             if (meshPosZInput && document.activeElement !== meshPosZInput) meshPosZInput.value = val.toFixed(1);
         }
@@ -13836,7 +14788,7 @@
                 const val = parseFloat(e.target.value);
                 const label = document.getElementById('meshRotXValue');
                 if (label) label.textContent = val;
-                surveyMeshGroup.rotation.x = val * Math.PI / 180;
+                cloudMeshGroup.rotation.x = val * Math.PI / 180;
             });
         }
         const meshRotYSlider = document.getElementById('meshRotYSlider');
@@ -13845,7 +14797,7 @@
                 const val = parseFloat(e.target.value);
                 const label = document.getElementById('meshRotYValue');
                 if (label) label.textContent = val;
-                surveyMeshGroup.rotation.y = val * Math.PI / 180;
+                cloudMeshGroup.rotation.y = val * Math.PI / 180;
             });
         }
         const meshRotZSlider = document.getElementById('meshRotZSlider');
@@ -13854,7 +14806,7 @@
                 const val = parseFloat(e.target.value);
                 const label = document.getElementById('meshRotZValue');
                 if (label) label.textContent = val;
-                surveyMeshGroup.rotation.z = val * Math.PI / 180;
+                cloudMeshGroup.rotation.z = val * Math.PI / 180;
             });
         }
 
@@ -14000,6 +14952,35 @@
         }
 
         renderer.domElement.addEventListener('click', (event) => {
+            if (cloudMeshGeoAlignState.active) {
+                if (cloudMeshGeoAlignState.phase === 'source') {
+                    if (cloudMeshGeoAlignState.sourceLocalPoints.length >= cloudMeshGeoAlignState.maxPoints) {
+                        cloudMeshGeoAlignState.phase = 'target';
+                        setCloudMeshGeoAlignStatus('Source 4/4 done. Now pick 4 matching geo points.', '#67e8f9');
+                        return;
+                    }
+                    const sourceHit = pickCloudMeshPointFromClient(event.clientX, event.clientY);
+                    if (!sourceHit) {
+                        setCloudMeshGeoAlignStatus('Could not pick cloud mesh point. Click directly on the mesh.', '#fca5a5');
+                        return;
+                    }
+                    addCloudMeshGeoAlignSourcePoint(sourceHit);
+                    return;
+                }
+
+                if (cloudMeshGeoAlignState.targetWorldPoints.length >= cloudMeshGeoAlignState.maxPoints) {
+                    setCloudMeshGeoAlignStatus('Target 4/4 done. Click Apply Fit.', '#86efac');
+                    return;
+                }
+                const targetPoint = pickWorldPointFromClient(event.clientX, event.clientY);
+                if (!targetPoint) {
+                    setCloudMeshGeoAlignStatus('No valid geo-referenced point picked. Try again.', '#fca5a5');
+                    return;
+                }
+                addCloudMeshGeoAlignTargetPoint(targetPoint);
+                return;
+            }
+
             if (!isAligning) return;
 
             mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
@@ -14774,6 +15755,8 @@
                     { id: 'mesh', label: 'Mesh & LiDAR' },
                     { id: 'geo', label: 'Geo' },
                     { id: 'survey', label: 'Survey Plan' },
+                    { id: 'lasso', label: 'Lasso Remove' },
+                    { id: 'solids', label: 'Solid Build' },
                     { id: 'ruler', label: 'Ruler' },
                     { id: 'annotations', label: 'Annotations' },
                     { id: 'collab', label: 'Collaboration' },
@@ -14853,6 +15836,10 @@
                     this.renderGeoContent(ctx);
                 } else if (this.mode === 'survey') {
                     this.renderSurveyContent(ctx);
+                } else if (this.mode === 'lasso') {
+                    this.renderLassoContent(ctx);
+                } else if (this.mode === 'solids') {
+                    this.renderSolidsContent(ctx);
                 } else if (this.mode === 'ruler') {
                     this.renderRulerContent(ctx);
                 } else if (this.mode === 'annotations') {
@@ -14963,15 +15950,92 @@
                 this.buttons.push({ ...close, action: 'close' });
             }
 
+            wrapButtonText(ctx, text, maxWidth, maxLines = 2) {
+                const words = String(text || '').trim().split(/\s+/).filter(Boolean);
+                if (!words.length) return [''];
+
+                const lines = [];
+                let current = '';
+
+                for (let i = 0; i < words.length; i++) {
+                    const candidate = current ? `${current} ${words[i]}` : words[i];
+                    if (ctx.measureText(candidate).width <= maxWidth) {
+                        current = candidate;
+                        continue;
+                    }
+
+                    if (current) {
+                        lines.push(current);
+                        current = words[i];
+                    } else {
+                        // Very long token fallback: clip with ellipsis.
+                        let token = words[i];
+                        while (token.length > 1 && ctx.measureText(`${token}...`).width > maxWidth) {
+                            token = token.slice(0, -1);
+                        }
+                        lines.push(`${token}...`);
+                        current = '';
+                    }
+
+                    if (lines.length >= maxLines - 1) {
+                        break;
+                    }
+                }
+
+                if (current) {
+                    lines.push(current);
+                }
+
+                if (lines.length > maxLines) {
+                    lines.length = maxLines;
+                }
+
+                if (lines.length === maxLines) {
+                    let last = lines[maxLines - 1];
+                    while (last.length > 1 && ctx.measureText(last).width > maxWidth) {
+                        last = last.slice(0, -1);
+                    }
+                    const hasRemainingWords = words.join(' ') !== lines.join(' ');
+                    lines[maxLines - 1] = hasRemainingWords ? `${last.replace(/\.*$/, '')}...` : last;
+                }
+
+                return lines;
+            }
+
+            drawButtonLabel(ctx, text, x, y, w, h) {
+                const maxTextWidth = Math.max(40, w - 24);
+                const maxTextHeight = Math.max(22, h - 14);
+                let fontSize = h >= 74 ? 24 : 20;
+                let lines = [String(text || '')];
+
+                for (; fontSize >= 14; fontSize--) {
+                    ctx.font = `700 ${fontSize}px 'Inter', sans-serif`;
+                    lines = this.wrapButtonText(ctx, text, maxTextWidth, 2);
+                    const lineHeight = Math.round(fontSize * 1.12);
+                    const blockHeight = lines.length * lineHeight;
+                    if (blockHeight <= maxTextHeight) {
+                        break;
+                    }
+                }
+
+                const lineHeight = Math.round(fontSize * 1.12);
+                const blockHeight = lines.length * lineHeight;
+                const startY = y + ((h - blockHeight) / 2) + fontSize;
+
+                ctx.fillStyle = '#f8fafc';
+                ctx.font = `700 ${fontSize}px 'Inter', sans-serif`;
+                ctx.textAlign = 'center';
+                for (let i = 0; i < lines.length; i++) {
+                    ctx.fillText(lines[i], x + (w / 2), startY + (i * lineHeight));
+                }
+            }
+
             renderActionButton(ctx, x, y, w, h, text, action, color = 'rgba(255,255,255,0.1)') {
                 ctx.fillStyle = color;
                 this.roundRect(ctx, x, y, w, h, 14, true);
                 ctx.strokeStyle = 'rgba(255,255,255,0.2)';
                 this.roundRect(ctx, x, y, w, h, 14, false, true);
-                ctx.fillStyle = '#f8fafc';
-                ctx.font = "700 24px 'Inter', sans-serif";
-                ctx.textAlign = 'center';
-                ctx.fillText(text, x + w / 2, y + h / 2 + 8);
+                this.drawButtonLabel(ctx, text, x, y, w, h);
                 this.buttons.push({ x, y, w, h, action });
             }
 
@@ -15215,6 +16279,124 @@
                 this.renderActionButton(ctx, 60, 726, 290, 78, isDrawingSurvey ? 'Finish Polygon' : 'Start Drawing', 'survey.finishPoly', 'rgba(34,197,94,0.28)');
                 this.renderActionButton(ctx, 370, 726, 290, 78, 'Survey Report', 'survey.report');
                 this.renderActionButton(ctx, 680, 726, 290, 78, 'Print Plan', 'survey.print');
+            }
+
+            renderLassoContent(ctx) {
+                this.renderHeaderActionButtons(ctx);
+
+                const modeSel = document.getElementById('branchSelectionMode');
+                const pathWidth = document.getElementById('branchPathWidth');
+                const lassoStatus = document.getElementById('pipeLassoStatus');
+                const branchStatus = document.getElementById('branchRegionsStatus');
+
+                const modeLabel = modeSel ? modeSel.value : 'polygon';
+                const pathWidthVal = pathWidth ? parseFloat(pathWidth.value || '18') : 18;
+
+                ctx.fillStyle = '#e2e8f0';
+                ctx.font = "700 44px 'Inter', sans-serif";
+                ctx.textAlign = 'center';
+                ctx.fillText('Lasso Remove (VR Native)', 512, 170);
+
+                ctx.fillStyle = '#93c5fd';
+                ctx.font = "600 22px 'Inter', sans-serif";
+                ctx.textAlign = 'left';
+                ctx.fillText(`Selection Mode: ${modeLabel}`, 60, 236);
+                ctx.fillText(`Path Width: ${pathWidthVal.toFixed(0)} px`, 60, 268);
+                ctx.fillText(`Lasso Status: ${lassoStatus ? lassoStatus.textContent : 'inactive'}`, 60, 300);
+                ctx.fillText(`Branch Regions: ${branchStatus ? branchStatus.textContent : '0'}`, 60, 332);
+
+                this.renderActionButton(ctx, 60, 420, 290, 78, 'Start Lasso', 'lasso.start', 'rgba(14,165,233,0.35)');
+                this.renderActionButton(ctx, 370, 420, 290, 78, 'Undo Point', 'lasso.undoPoint', 'rgba(245,158,11,0.28)');
+                this.renderActionButton(ctx, 680, 420, 290, 78, 'Finish Lasso', 'lasso.finish', 'rgba(34,197,94,0.28)');
+
+                this.renderActionButton(ctx, 60, 522, 290, 78, 'Remove Lasso Area', 'lasso.removeArea', 'rgba(34,197,94,0.28)');
+                this.renderActionButton(ctx, 370, 522, 290, 78, 'Undo Last Remove', 'lasso.undoRemove', 'rgba(245,158,11,0.28)');
+                this.renderActionButton(ctx, 680, 522, 290, 78, 'Clear Lasso', 'lasso.clear', 'rgba(239,68,68,0.28)');
+
+                this.renderActionButton(ctx, 60, 624, 290, 78, 'Add Branch Region', 'lasso.addBranch', 'rgba(20,184,166,0.30)');
+                this.renderActionButton(ctx, 370, 624, 290, 78, 'Clear Branch Regions', 'lasso.clearBranch', 'rgba(239,68,68,0.24)');
+                this.renderActionButton(ctx, 680, 624, 290, 78, 'Mode Next', 'lasso.modeNext');
+
+                this.renderActionButton(ctx, 60, 726, 290, 78, 'Path Width -', 'lasso.pathWidthDown');
+                this.renderActionButton(ctx, 370, 726, 290, 78, 'Path Width +', 'lasso.pathWidthUp');
+                this.renderActionButton(ctx, 680, 726, 290, 78, 'Refresh', 'lasso.refresh');
+
+                this.renderActionButton(ctx, 60, 828, 445, 72, 'Export CSV', 'lasso.exportCSV', 'rgba(99,102,241,0.28)');
+                this.renderActionButton(ctx, 525, 828, 445, 72, 'Export PLY', 'lasso.exportPLY', 'rgba(139,92,246,0.28)');
+            }
+
+            renderSolidsContent(ctx) {
+                this.renderHeaderActionButtons(ctx);
+
+                const typeSel = document.getElementById('solidReconstructType');
+                const radiusScale = document.getElementById('solidRadiusScale');
+                const smoothness = document.getElementById('solidSmoothness');
+                const branchModeSel = document.getElementById('solidBranchSelectionMode');
+                const branchPathWidth = document.getElementById('solidBranchPathWidth');
+                const branchSelect = document.getElementById('branchSolidSelect');
+                const savedSelect = document.getElementById('savedBranchSolidSelect');
+                const showLoaded = document.getElementById('showLoadedSavedSolids');
+                const statusEl = document.getElementById('solidReconstructStatus');
+                const savedStatusEl = document.getElementById('savedBranchSolidsStatus');
+
+                const typeLabel = typeSel ? typeSel.value : 'pipe';
+                const radiusVal = radiusScale ? parseFloat(radiusScale.value || '1') : 1;
+                const smoothVal = smoothness ? parseFloat(smoothness.value || '80') : 80;
+                const branchMode = branchModeSel ? branchModeSel.value : 'polygon';
+                const branchPathVal = branchPathWidth ? parseFloat(branchPathWidth.value || '18') : 18;
+                const branchCount = branchSelect ? Math.max(0, branchSelect.options.length - 1) : 0;
+                const savedCount = savedSelect ? Math.max(0, savedSelect.options.length - 1) : 0;
+
+                ctx.fillStyle = '#e2e8f0';
+                ctx.font = "700 44px 'Inter', sans-serif";
+                ctx.textAlign = 'center';
+                ctx.fillText('Solid Build (VR Native)', 512, 170);
+
+                ctx.fillStyle = '#93c5fd';
+                ctx.font = "600 20px 'Inter', sans-serif";
+                ctx.textAlign = 'left';
+                ctx.fillText(`Type: ${typeLabel} | Radius: ${radiusVal.toFixed(2)} | Smoothness: ${smoothVal.toFixed(0)}`, 60, 236);
+                ctx.fillText(`Branch Mode: ${branchMode} | Path Width: ${branchPathVal.toFixed(0)} px`, 60, 264);
+                ctx.fillText(`Branch Solids: ${branchCount} | Saved Solids: ${savedCount} | Show Loaded: ${showLoaded && showLoaded.checked ? 'ON' : 'OFF'}`, 60, 292);
+                ctx.fillText(`Status: ${statusEl ? statusEl.textContent : 'inactive'}`, 60, 320);
+                ctx.fillText(`${savedStatusEl ? savedStatusEl.textContent : 'Saved branch solids: not loaded'}`, 60, 348);
+
+                this.renderActionButton(ctx, 60, 392, 290, 68, 'Build Solid', 'solids.buildSolid', 'rgba(249,115,22,0.30)');
+                this.renderActionButton(ctx, 370, 392, 290, 68, 'Build Branch Solids', 'solids.buildBranches', 'rgba(251,113,133,0.30)');
+                this.renderActionButton(ctx, 680, 392, 290, 68, 'Undo Solid', 'solids.undoSolid', 'rgba(239,68,68,0.24)');
+
+                this.renderActionButton(ctx, 60, 472, 220, 62, 'Type Prev', 'solids.typePrev');
+                this.renderActionButton(ctx, 290, 472, 220, 62, 'Type Next', 'solids.typeNext');
+                this.renderActionButton(ctx, 520, 472, 220, 62, 'Radius -', 'solids.radiusDown');
+                this.renderActionButton(ctx, 750, 472, 220, 62, 'Radius +', 'solids.radiusUp');
+
+                this.renderActionButton(ctx, 60, 548, 220, 62, 'Smooth -', 'solids.smoothDown');
+                this.renderActionButton(ctx, 290, 548, 220, 62, 'Smooth +', 'solids.smoothUp');
+                this.renderActionButton(ctx, 520, 548, 220, 62, 'Branch Mode Next', 'solids.branchModeNext');
+                this.renderActionButton(ctx, 750, 548, 220, 62, 'Path Width +/-', 'solids.branchPathWidthStep');
+
+                this.renderActionButton(ctx, 60, 624, 220, 62, 'Start Branch Draw', 'solids.branchStart', 'rgba(14,165,233,0.28)');
+                this.renderActionButton(ctx, 290, 624, 220, 62, 'Undo Point', 'solids.branchUndo', 'rgba(245,158,11,0.28)');
+                this.renderActionButton(ctx, 520, 624, 220, 62, 'Finish Draw', 'solids.branchFinish', 'rgba(34,197,94,0.28)');
+                this.renderActionButton(ctx, 750, 624, 220, 62, 'Clear Draw', 'solids.branchClear', 'rgba(239,68,68,0.24)');
+
+                this.renderActionButton(ctx, 60, 700, 290, 62, 'Add Branch Region', 'solids.addBranchRegion', 'rgba(20,184,166,0.28)');
+                this.renderActionButton(ctx, 370, 700, 290, 62, 'Select Branch Prev', 'solids.selectBranchPrev');
+                this.renderActionButton(ctx, 680, 700, 290, 62, 'Select Branch Next', 'solids.selectBranchNext');
+
+                this.renderActionButton(ctx, 60, 776, 220, 62, 'Move X +', 'solids.moveXPlus');
+                this.renderActionButton(ctx, 290, 776, 220, 62, 'Move Y +', 'solids.moveYPlus');
+                this.renderActionButton(ctx, 520, 776, 220, 62, 'Move Z +', 'solids.moveZPlus');
+                this.renderActionButton(ctx, 750, 776, 220, 62, 'Apply Move', 'solids.applyMove', 'rgba(14,165,233,0.28)');
+
+                this.renderActionButton(ctx, 60, 852, 290, 62, 'Combine + Save', 'solids.combineSave', 'rgba(34,197,94,0.28)');
+                this.renderActionButton(ctx, 370, 852, 290, 62, 'Refresh Saved', 'solids.refreshSaved');
+                this.renderActionButton(ctx, 680, 852, 290, 62, 'Show Loaded Toggle', 'solids.toggleShowLoaded');
+
+                this.renderActionButton(ctx, 60, 928, 220, 62, 'Saved Prev', 'solids.savedPrev');
+                this.renderActionButton(ctx, 290, 928, 220, 62, 'Saved Next', 'solids.savedNext');
+                this.renderActionButton(ctx, 520, 928, 220, 62, 'Load Saved', 'solids.loadSaved', 'rgba(20,184,166,0.28)');
+                this.renderActionButton(ctx, 750, 928, 220, 62, 'Delete Saved', 'solids.deleteSaved', 'rgba(239,68,68,0.28)');
             }
 
             renderCollabContent(ctx) {
@@ -15609,6 +16791,10 @@
                         this.mode = 'geo';
                     } else if (tabId === 'survey') {
                         this.mode = 'survey';
+                    } else if (tabId === 'lasso') {
+                        this.mode = 'lasso';
+                    } else if (tabId === 'solids') {
+                        this.mode = 'solids';
                     } else if (tabId === 'ruler') {
                         this.mode = 'ruler';
                     } else if (tabId === 'annotations') {
@@ -15708,6 +16894,19 @@
                 const surveySpacing = document.getElementById('surveyGridSpacingSlider');
                 const showSurveyGen = document.getElementById('showSurveyGeneratedGrid');
                 const ann = window.annMgr;
+                const branchSelectionMode = document.getElementById('branchSelectionMode');
+                const branchPathWidth = document.getElementById('branchPathWidth');
+                const solidType = document.getElementById('solidReconstructType');
+                const solidRadiusScale = document.getElementById('solidRadiusScale');
+                const solidSmoothness = document.getElementById('solidSmoothness');
+                const solidBranchSelectionMode = document.getElementById('solidBranchSelectionMode');
+                const solidBranchPathWidth = document.getElementById('solidBranchPathWidth');
+                const branchSolidSelect = document.getElementById('branchSolidSelect');
+                const savedBranchSolidSelect = document.getElementById('savedBranchSolidSelect');
+                const branchMoveX = document.getElementById('branchMoveX');
+                const branchMoveY = document.getElementById('branchMoveY');
+                const branchMoveZ = document.getElementById('branchMoveZ');
+                const showLoadedSavedSolids = document.getElementById('showLoadedSavedSolids');
 
                 const stepSlider = (slider, delta) => {
                     if (!slider) return;
@@ -15718,6 +16917,18 @@
                     slider.value = String(val);
                     slider.dispatchEvent(new Event('input'));
                     slider.dispatchEvent(new Event('change'));
+                };
+
+                const cycleSelect = (sel, dir = 1) => {
+                    if (!sel || !sel.options || !sel.options.length) return false;
+                    const total = sel.options.length;
+                    let idx = sel.selectedIndex;
+                    if (idx < 0) idx = 0;
+                    idx = (idx + dir + total) % total;
+                    sel.selectedIndex = idx;
+                    sel.value = sel.options[idx].value;
+                    sel.dispatchEvent(new Event('change'));
+                    return true;
                 };
 
                 if (action === 'layers.toggleModel' && showPointsCb) {
@@ -15883,6 +17094,95 @@
                         window.startSurveyGridDraw();
                         this.hide();
                     }
+                } else if (action === 'lasso.start' && window.startPipeLasso) {
+                    window.startPipeLasso();
+                    this.hide();
+                } else if (action === 'lasso.undoPoint' && window.undoPipeLasso) {
+                    window.undoPipeLasso();
+                } else if (action === 'lasso.finish' && window.finishPipeLasso) {
+                    window.finishPipeLasso();
+                } else if (action === 'lasso.removeArea' && window.applyPipeLassoExtraction) {
+                    window.applyPipeLassoExtraction();
+                } else if (action === 'lasso.undoRemove' && window.undoPipeLassoExtraction) {
+                    window.undoPipeLassoExtraction();
+                } else if (action === 'lasso.clear' && window.clearPipeLasso) {
+                    window.clearPipeLasso();
+                } else if (action === 'lasso.addBranch' && window.addBranchRegionFromLasso) {
+                    window.addBranchRegionFromLasso();
+                } else if (action === 'lasso.clearBranch' && window.clearBranchRegions) {
+                    window.clearBranchRegions();
+                } else if (action === 'lasso.modeNext' && branchSelectionMode) {
+                    cycleSelect(branchSelectionMode, 1);
+                } else if (action === 'lasso.pathWidthDown') {
+                    stepSlider(branchPathWidth, -2);
+                } else if (action === 'lasso.pathWidthUp') {
+                    stepSlider(branchPathWidth, 2);
+                } else if (action === 'lasso.exportCSV' && window.exportCroppedPointsCSV) {
+                    window.exportCroppedPointsCSV();
+                } else if (action === 'lasso.exportPLY' && window.exportCroppedPointsPLY) {
+                    window.exportCroppedPointsPLY();
+                } else if (action === 'solids.buildSolid' && window.buildSolidFromExtraction) {
+                    window.buildSolidFromExtraction();
+                } else if (action === 'solids.buildBranches' && window.buildBranchSolidsFromRegions) {
+                    window.buildBranchSolidsFromRegions();
+                } else if (action === 'solids.undoSolid' && window.clearSolidReconstruction) {
+                    window.clearSolidReconstruction();
+                } else if (action === 'solids.typePrev' && solidType) {
+                    cycleSelect(solidType, -1);
+                } else if (action === 'solids.typeNext' && solidType) {
+                    cycleSelect(solidType, 1);
+                } else if (action === 'solids.radiusDown') {
+                    stepSlider(solidRadiusScale, -0.05);
+                } else if (action === 'solids.radiusUp') {
+                    stepSlider(solidRadiusScale, 0.05);
+                } else if (action === 'solids.smoothDown') {
+                    stepSlider(solidSmoothness, -2);
+                } else if (action === 'solids.smoothUp') {
+                    stepSlider(solidSmoothness, 2);
+                } else if (action === 'solids.branchModeNext' && solidBranchSelectionMode) {
+                    cycleSelect(solidBranchSelectionMode, 1);
+                } else if (action === 'solids.branchPathWidthStep') {
+                    const current = solidBranchPathWidth ? parseFloat(solidBranchPathWidth.value || '18') : 18;
+                    const nextDelta = current >= 40 ? -4 : 4;
+                    stepSlider(solidBranchPathWidth, nextDelta);
+                } else if (action === 'solids.branchStart' && window.startSolidBranchDraw) {
+                    window.startSolidBranchDraw();
+                    this.hide();
+                } else if (action === 'solids.branchUndo' && window.undoSolidBranchDraw) {
+                    window.undoSolidBranchDraw();
+                } else if (action === 'solids.branchFinish' && window.finishSolidBranchDraw) {
+                    window.finishSolidBranchDraw();
+                } else if (action === 'solids.branchClear' && window.clearSolidBranchDraw) {
+                    window.clearSolidBranchDraw();
+                } else if (action === 'solids.addBranchRegion' && window.addBranchRegionFromSolidDraw) {
+                    window.addBranchRegionFromSolidDraw();
+                } else if (action === 'solids.selectBranchPrev' && branchSolidSelect && branchSolidSelect.options.length > 1) {
+                    cycleSelect(branchSolidSelect, -1);
+                } else if (action === 'solids.selectBranchNext' && branchSolidSelect && branchSolidSelect.options.length > 1) {
+                    cycleSelect(branchSolidSelect, 1);
+                } else if (action === 'solids.moveXPlus' && branchMoveX) {
+                    branchMoveX.value = String((parseFloat(branchMoveX.value || '0') + 0.1).toFixed(2));
+                } else if (action === 'solids.moveYPlus' && branchMoveY) {
+                    branchMoveY.value = String((parseFloat(branchMoveY.value || '0') + 0.1).toFixed(2));
+                } else if (action === 'solids.moveZPlus' && branchMoveZ) {
+                    branchMoveZ.value = String((parseFloat(branchMoveZ.value || '0') + 0.1).toFixed(2));
+                } else if (action === 'solids.applyMove' && window.applySelectedBranchMove) {
+                    window.applySelectedBranchMove();
+                } else if (action === 'solids.combineSave' && window.combineAndSaveBranchSolids) {
+                    window.combineAndSaveBranchSolids();
+                } else if (action === 'solids.refreshSaved' && window.refreshSavedBranchSolids) {
+                    window.refreshSavedBranchSolids();
+                } else if (action === 'solids.savedPrev' && savedBranchSolidSelect && savedBranchSolidSelect.options.length > 1) {
+                    cycleSelect(savedBranchSolidSelect, -1);
+                } else if (action === 'solids.savedNext' && savedBranchSolidSelect && savedBranchSolidSelect.options.length > 1) {
+                    cycleSelect(savedBranchSolidSelect, 1);
+                } else if (action === 'solids.loadSaved' && window.loadSelectedSavedBranchSolid) {
+                    window.loadSelectedSavedBranchSolid();
+                } else if (action === 'solids.deleteSaved' && window.deleteSelectedSavedBranchSolid) {
+                    window.deleteSelectedSavedBranchSolid();
+                } else if (action === 'solids.toggleShowLoaded' && showLoadedSavedSolids && window.toggleLoadedSavedSolids) {
+                    showLoadedSavedSolids.checked = !showLoadedSavedSolids.checked;
+                    window.toggleLoadedSavedSolids(showLoadedSavedSolids.checked);
                 } else if (action === 'collab.create' && window.createCollaborationSession) {
                     window.createCollaborationSession();
                 } else if (action === 'collab.join' && window.joinCollaborationSession) {

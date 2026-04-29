@@ -80,6 +80,23 @@ def init_db():
             ON annotations (job_id, user_email);
         """)
 
+        # Persist per-user cloud mesh geo alignments (keyed by mesh path/name).
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS user_mesh_alignments (
+                id SERIAL PRIMARY KEY,
+                user_email VARCHAR(255) NOT NULL,
+                mesh_key TEXT NOT NULL,
+                alignment_json TEXT NOT NULL,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE (user_email, mesh_key)
+            );
+        """)
+
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_user_mesh_alignments_user
+            ON user_mesh_alignments (user_email);
+        """)
+
         conn.commit()
         print("Database initialized successfully.")
         cur.close()

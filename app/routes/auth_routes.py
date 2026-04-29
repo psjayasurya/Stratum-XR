@@ -10,6 +10,7 @@ from jose import JWTError, jwt
 from typing import Optional
 from datetime import datetime, timedelta
 import random
+import json
 
 from app.config import config, DEFAULT_SETTINGS, COLOR_PALETTES, TEMPLATES_FOLDER
 from app.database import get_db
@@ -407,6 +408,106 @@ async def save_profile(request: Request, access_token: Optional[str] = Cookie(No
         db.close()
         
         return {"success": True, "display_name": display_name, "company_name": company_name, "photo_url": photo_url}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@router.get("/api/mesh-alignment")
+async def get_mesh_alignment(mesh_key: str, access_token: Optional[str] = Cookie(None)):
+    """Fetch saved cloud mesh alignment for current user and mesh key."""
+    user_email = get_current_user(access_token)
+    if not user_email:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    mesh_key = (mesh_key or '').strip()
+    if not mesh_key:
+        raise HTTPException(status_code=400, detail="mesh_key is required")
+
+    try:
+        db = get_db()
+        cur = db.cursor()
+        cur.execute(
+            "SELECT alignment_json FROM user_mesh_alignments WHERE user_email=%s AND mesh_key=%s",
+            (user_email, mesh_key)
+        )
+        row = cur.fetchone()
+        db.close()
+
+        if not row:
+            return {"success": True, "alignment": None}
+
+        alignment = None
+        try:
+            alignment = json.loads(row[0]) if row[0] else None
+        except Exception:
+            alignment = None
+
+        return {"success": True, "alignment": alignment}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@router.post("/api/mesh-alignment")
+async def save_mesh_alignment(request: Request, access_token: Optional[str] = Cookie(None)):
+    """Save or update cloud mesh alignment for current user."""
+    user_email = get_current_user(access_token)
+    if not user_email:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    try:
+        payload = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON payload")
+
+    mesh_key = str((payload or {}).get("mesh_key") or '').strip()
+    alignment = (payload or {}).get("alignment")
+
+    if not mesh_key:
+        raise HTTPException(status_code=400, detail="mesh_key is required")
+    if alignment is None:
+        raise HTTPException(status_code=400, detail="alignment is required")
+
+    try:
+        alignment_json = json.dumps(alignment)
+        db = get_db()
+        cur = db.cursor()
+        cur.execute(
+            """
+            INSERT INTO user_mesh_alignments (user_email, mesh_key, alignment_json)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (user_email, mesh_key)
+            DO UPDATE SET alignment_json = EXCLUDED.alignment_json, updated_at = CURRENT_TIMESTAMP
+            """,
+            (user_email, mesh_key, alignment_json)
+        )
+        db.commit()
+        db.close()
+        return {"success": True}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@router.delete("/api/mesh-alignment")
+async def delete_mesh_alignment(mesh_key: str, access_token: Optional[str] = Cookie(None)):
+    """Delete saved cloud mesh alignment for current user and mesh key."""
+    user_email = get_current_user(access_token)
+    if not user_email:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    mesh_key = (mesh_key or '').strip()
+    if not mesh_key:
+        raise HTTPException(status_code=400, detail="mesh_key is required")
+
+    try:
+        db = get_db()
+        cur = db.cursor()
+        cur.execute(
+            "DELETE FROM user_mesh_alignments WHERE user_email=%s AND mesh_key=%s",
+            (user_email, mesh_key)
+        )
+        db.commit()
+        db.close()
+        return {"success": True}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
