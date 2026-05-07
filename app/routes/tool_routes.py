@@ -9,8 +9,9 @@ import pandas as pd
 import os
 import uuid
 
-from app.config import HAS_GEOSPATIAL, PROCESSED_FOLDER, TEMPLATES_FOLDER
+from app.config import HAS_GEOSPATIAL, PROCESSED_FOLDER, TEMPLATES_FOLDER, config
 from app.utils.file_utils import secure_filename
+from app.utils.auth_security import ensure_csrf_token
 
 # Import geospatial libraries if available
 if HAS_GEOSPATIAL:
@@ -36,7 +37,17 @@ async def converter_page(request: Request):
     Returns:
         HTML response with converter interface
     """
-    return templates.TemplateResponse("converter.html", {"request": request})
+    csrf_token = ensure_csrf_token(request)
+    response = templates.TemplateResponse("converter.html", {"request": request, "csrf_token": csrf_token})
+    response.set_cookie(
+        key="csrf_token",
+        value=csrf_token,
+        httponly=False,
+        secure=config.COOKIE_SECURE,
+        samesite=config.COOKIE_SAMESITE,
+        path="/",
+    )
+    return response
 
 
 @router.post("/tools/survey_boundary")

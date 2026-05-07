@@ -1,9 +1,10 @@
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException, Request
 from typing import List, Dict
 import uuid
 from datetime import datetime
 from app.services.websocket_manager import manager
 from app.services.mom_service import mom_service
+from app.utils.auth_security import validate_csrf
 
 router = APIRouter()
 
@@ -111,12 +112,14 @@ class SessionManager:
         return session_store.get(session_id)
 
 @router.post("/create")
-async def create_session():
+async def create_session(request: Request):
+    validate_csrf(request, request.headers.get("x-csrf-token"))
     session_id = SessionManager.create_session()
     return {"session_id": session_id}
 
 @router.post("/{session_id}/finalize")
-async def finalize_session(session_id: str):
+async def finalize_session(session_id: str, request: Request):
+    validate_csrf(request, request.headers.get("x-csrf-token"))
     session = SessionManager.get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")

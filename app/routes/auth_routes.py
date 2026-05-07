@@ -2,19 +2,37 @@
 Authentication Routes
 Handles user registration, login, verification, and session management.
 """
+import asyncio
+import json
+import random
+import uuid
+from datetime import datetime, timedelta
+from typing import Optional
+
 from fastapi import APIRouter, Request, Form, Cookie, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from passlib.context import CryptContext
-from jose import JWTError, jwt
-from typing import Optional
-from datetime import datetime, timedelta
-import random
-import json
+from jose import jwt
 
 from app.config import config, DEFAULT_SETTINGS, COLOR_PALETTES, TEMPLATES_FOLDER
 from app.database import get_db
 from app.utils.email import send_email
+from app.utils.auth_security import (
+    clear_auth_cookies,
+    create_access_token,
+    create_refresh_session,
+    create_refresh_token,
+    ensure_csrf_token,
+    increment_user_token_version,
+    revoke_refresh_session,
+    revoke_user_refresh_sessions,
+    set_auth_cookies,
+    validate_csrf,
+    validate_refresh_session,
+    verify_access_token,
+    verify_refresh_token,
+)
 
 
 # Create router
@@ -30,40 +48,19 @@ templates = Jinja2Templates(directory=TEMPLATES_FOLDER)
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
-# ============ JWT UTILITIES ============
-
-def create_access_token(data: dict, expires_delta: timedelta = None):
-    """
-    Create JWT access token
-    
-    Args:
-        data: Dictionary to encode in token
-        expires_delta: Optional expiration time delta
-        
-    Returns:
-        Encoded JWT token string
-    """
-    to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta or config.JWT_ACCESS_TOKEN_EXPIRES)
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, config.JWT_SECRET_KEY, algorithm=config.JWT_ALGORITHM)
-
-
-def verify_token(token: str):
-    """
-    Verify and decode JWT token
-    
-    Args:
-        token: JWT token string
-        
-    Returns:
-        Email from token payload or None if invalid
-    """
-    try:
-        payload = jwt.decode(token, config.JWT_SECRET_KEY, algorithms=[config.JWT_ALGORITHM])
-        return payload.get("sub")
-    except JWTError:
-        return None
+def _render_template_with_csrf(request: Request, template_name: str, context: dict):
+    csrf_token = ensure_csrf_token(request)
+    response = templates.TemplateResponse(template_name, {**context, "csrf_token": csrf_token})
+    response.set_cookie(
+        key="csrf_token",
+        value=csrf_token,
+        httponly=False,
+        secure=config.COOKIE_SECURE,
+        samesite=config.COOKIE_SAMESITE,
+        path="/",
+        max_age=int(config.JWT_REFRESH_TOKEN_EXPIRES.total_seconds()),
+    )
+    return response
 
 
 def get_current_user(access_token: Optional[str] = Cookie(None)):
@@ -78,8 +75,7 @@ def get_current_user(access_token: Optional[str] = Cookie(None)):
     """
     if not access_token:
         return None
-    email = verify_token(access_token)
-    return email
+    return verify_access_token(access_token)
 
 
 # ============ AUTHENTICATION ROUTES ============
@@ -87,12 +83,12 @@ def get_current_user(access_token: Optional[str] = Cookie(None)):
 @router.get("/register", response_class=HTMLResponse)
 async def register_page(request: Request, error: Optional[str] = None):
     """Display registration page"""
-    return templates.TemplateResponse("register.html", {"request": request, "error": error})
+    return _render_template_with_csrf(request, "register.html", {"request": request, "error": error})
 
 
 @router.post("/register")
 @limiter.limit("5/minute")
-async def register(request: Request, email: str = Form(...), password: str = Form(...)):
+async def register(request: Request, email: str = Form(...), password: str = Form(...), csrf_token: str = Form(...)):
     """
     Register new user and send OTP
     
@@ -103,21 +99,24 @@ async def register(request: Request, email: str = Form(...), password: str = For
     Returns:
         Redirect to verification page or error page
     """
+    validate_csrf(request, csrf_token)
+
     hashed_password = pwd_context.hash(password)
     otp = str(random.randint(100000, 999999))
     hashed_otp = pwd_context.hash(otp)
+    otp_expires_at = datetime.utcnow() + timedelta(minutes=config.OTP_EXPIRES_MINUTES)
     
     try:
         db = get_db()
         cur = db.cursor()
         cur.execute(
-            "INSERT INTO users (email, password, otp) VALUES (%s,%s,%s)",
-            (email, hashed_password, hashed_otp)
+            "INSERT INTO users (email, password, otp, verified, otp_expires_at, otp_attempts, otp_last_sent_at, token_version) VALUES (%s,%s,%s,FALSE,%s,0,CURRENT_TIMESTAMP,0)",
+            (email, hashed_password, hashed_otp, otp_expires_at)
         )
         db.commit()
         db.close()
         
-        send_email(email, "Your OTP", f"Your OTP is {otp}")
+        await asyncio.to_thread(send_email, email, "Your OTP", f"Your OTP is {otp}")
         
         return RedirectResponse(url="/verify", status_code=303)
     except Exception as e:
@@ -127,11 +126,11 @@ async def register(request: Request, email: str = Form(...), password: str = For
 @router.get("/verify", response_class=HTMLResponse)
 async def verify_page(request: Request, error: Optional[str] = None):
     """Display OTP verification page"""
-    return templates.TemplateResponse("otp.html", {"request": request, "error": error})
+    return _render_template_with_csrf(request, "otp.html", {"request": request, "error": error})
 
 
 @router.post("/verify")
-async def verify_email(email: str = Form(...), otp: str = Form(...)):
+async def verify_email(request: Request, email: str = Form(...), otp: str = Form(...), csrf_token: str = Form(...)):
     """
     Verify user email with OTP
     
@@ -142,16 +141,39 @@ async def verify_email(email: str = Form(...), otp: str = Form(...)):
     Returns:
         Redirect to login page or error page
     """
+    validate_csrf(request, csrf_token)
+
     db = get_db()
     cur = db.cursor()
-    cur.execute("SELECT otp FROM users WHERE email=%s", (email,))
+    cur.execute("SELECT otp, otp_expires_at, otp_attempts FROM users WHERE email=%s", (email,))
     user = cur.fetchone()
     
-    if user and user[0] and pwd_context.verify(otp, user[0]):
-        cur.execute("UPDATE users SET verified=TRUE, otp=NULL WHERE email=%s", (email,))
+    if user and user[0]:
+        expires_at = user[1]
+        attempts = int(user[2] or 0)
+        if expires_at and expires_at < datetime.utcnow():
+            cur.execute("UPDATE users SET otp=NULL, otp_attempts=0, otp_expires_at=NULL WHERE email=%s", (email,))
+            db.commit()
+            db.close()
+            return RedirectResponse(url="/verify?error=OTP expired", status_code=303)
+
+        if pwd_context.verify(otp, user[0]):
+            cur.execute("UPDATE users SET verified=TRUE, otp=NULL, otp_attempts=0, otp_expires_at=NULL WHERE email=%s", (email,))
+            db.commit()
+            db.close()
+            return RedirectResponse(url="/login", status_code=303)
+
+        attempts += 1
+        if attempts >= config.OTP_MAX_ATTEMPTS:
+            cur.execute("UPDATE users SET otp=NULL, otp_attempts=0, otp_expires_at=NULL WHERE email=%s", (email,))
+            db.commit()
+            db.close()
+            return RedirectResponse(url="/verify?error=Too many invalid attempts", status_code=303)
+
+        cur.execute("UPDATE users SET otp_attempts=%s WHERE email=%s", (attempts, email))
         db.commit()
         db.close()
-        return RedirectResponse(url="/login", status_code=303)
+        return RedirectResponse(url="/verify?error=Invalid OTP", status_code=303)
     
     db.close()
     return RedirectResponse(url="/verify?error=Invalid OTP", status_code=303)
@@ -159,18 +181,18 @@ async def verify_email(email: str = Form(...), otp: str = Form(...)):
 @router.get("/", response_class=HTMLResponse)
 async def website_page(request: Request, error: Optional[str] = None):
     """Display web page"""
-    return templates.TemplateResponse("website.html", {"request": request, "error": error})
+    return _render_template_with_csrf(request, "website.html", {"request": request, "error": error})
 
 
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request, error: Optional[str] = None):
     """Display login page"""
-    return templates.TemplateResponse("login.html", {"request": request, "error": error})
+    return _render_template_with_csrf(request, "login.html", {"request": request, "error": error})
 
 
 @router.post("/login")
 @limiter.limit("10/minute")
-async def login(request: Request, email: str = Form(...), password: str = Form(...)):
+async def login(request: Request, email: str = Form(...), password: str = Form(...), csrf_token: str = Form(...)):
     """
     Authenticate user and create session
     
@@ -181,18 +203,22 @@ async def login(request: Request, email: str = Form(...), password: str = Form(.
     Returns:
         Redirect to dashboard with access token cookie or error page
     """
+    validate_csrf(request, csrf_token)
+
     db = get_db()
     cur = db.cursor()
-    cur.execute("SELECT password FROM users WHERE email=%s AND verified=TRUE", (email,))
+    cur.execute("SELECT password, COALESCE(token_version, 0) FROM users WHERE email=%s AND verified=TRUE", (email,))
     user = cur.fetchone()
     db.close()
     
     if user and pwd_context.verify(password, user[0]):
-        access_token = create_access_token({"sub": email})
+        token_version = int(user[1] or 0)
+        access_token = create_access_token(email, token_version=token_version)
+        refresh_token = create_refresh_token(email, token_version=token_version)
+        create_refresh_session(refresh_token, request)
+        csrf_value = ensure_csrf_token(request)
         response = RedirectResponse(url="/dashboard", status_code=303)
-        response.set_cookie(key="access_token", value=access_token, httponly=True, samesite="lax")
-        # Also set user_email cookie for collaboration features (not httponly so JS can read it)
-        response.set_cookie(key="user_email", value=email, httponly=False, samesite="lax")
+        set_auth_cookies(response, access_token, refresh_token, email, csrf_value)
         return response
     
     return RedirectResponse(url="/?error=Invalid credentials", status_code=303)
@@ -201,12 +227,14 @@ async def login(request: Request, email: str = Form(...), password: str = Form(.
 @router.get("/forgot-password", response_class=HTMLResponse)
 async def forgot_password_page(request: Request, error: Optional[str] = None, message: Optional[str] = None):
     """Display forgot password request page"""
-    return templates.TemplateResponse("forgot_password.html", {"request": request, "error": error, "message": message})
+    return _render_template_with_csrf(request, "forgot_password.html", {"request": request, "error": error, "message": message})
 
 
 @router.post("/forgot-password")
-async def forgot_password_request(email: str = Form(...)):
+async def forgot_password_request(request: Request, email: str = Form(...), csrf_token: str = Form(...)):
     """Send reset OTP to user email"""
+    validate_csrf(request, csrf_token)
+
     db = get_db()
     cur = db.cursor()
     cur.execute("SELECT id FROM users WHERE email=%s", (email,))
@@ -218,11 +246,15 @@ async def forgot_password_request(email: str = Form(...)):
         
     otp = str(random.randint(100000, 999999))
     hashed_otp = pwd_context.hash(otp)
-    cur.execute("UPDATE users SET otp=%s WHERE email=%s", (hashed_otp, email))
+    otp_expires_at = datetime.utcnow() + timedelta(minutes=config.OTP_EXPIRES_MINUTES)
+    cur.execute(
+        "UPDATE users SET otp=%s, otp_expires_at=%s, otp_attempts=0, otp_last_sent_at=CURRENT_TIMESTAMP WHERE email=%s",
+        (hashed_otp, otp_expires_at, email)
+    )
     db.commit()
     db.close()
     
-    send_email(email, "Password Reset OTP", f"Your password reset OTP is {otp}")
+    await asyncio.to_thread(send_email, email, "Password Reset OTP", f"Your password reset OTP is {otp}")
     
     return RedirectResponse(url=f"/verify-reset-otp?email={email}", status_code=303)
 
@@ -230,44 +262,102 @@ async def forgot_password_request(email: str = Form(...)):
 @router.get("/verify-reset-otp", response_class=HTMLResponse)
 async def verify_reset_otp_page(request: Request, email: str, error: Optional[str] = None):
     """Display OTP verification page for password reset"""
-    return templates.TemplateResponse("verify_reset_otp.html", {"request": request, "email": email, "error": error})
+    return _render_template_with_csrf(request, "verify_reset_otp.html", {"request": request, "email": email, "error": error})
 
 
 @router.post("/verify-reset-otp")
-async def verify_reset_otp(email: str = Form(...), otp: str = Form(...)):
+async def verify_reset_otp(request: Request, email: str = Form(...), otp: str = Form(...), csrf_token: str = Form(...)):
     """Verify reset OTP and redirect to new password page"""
+    validate_csrf(request, csrf_token)
+
     db = get_db()
     cur = db.cursor()
-    cur.execute("SELECT otp FROM users WHERE email=%s", (email,))
+    cur.execute("SELECT otp, otp_expires_at, otp_attempts FROM users WHERE email=%s", (email,))
     user = cur.fetchone()
     db.close()
     
-    if user and user[0] and pwd_context.verify(otp, user[0]):
-        return RedirectResponse(url=f"/reset-password?email={email}&otp={otp}", status_code=303)
+    if user and user[0]:
+        expires_at = user[1]
+        attempts = int(user[2] or 0)
+        if expires_at and expires_at < datetime.utcnow():
+            db = get_db()
+            cur = db.cursor()
+            cur.execute("UPDATE users SET otp=NULL, otp_attempts=0, otp_expires_at=NULL WHERE email=%s", (email,))
+            db.commit()
+            db.close()
+            return RedirectResponse(url=f"/verify-reset-otp?email={email}&error=OTP expired", status_code=303)
+
+        if pwd_context.verify(otp, user[0]):
+            db = get_db()
+            cur = db.cursor()
+            cur.execute("UPDATE users SET otp=NULL, otp_attempts=0, otp_expires_at=NULL WHERE email=%s", (email,))
+            db.commit()
+            db.close()
+            reset_token = jwt.encode(
+                {
+                    "sub": email,
+                    "typ": "password_reset",
+                    "iat": datetime.utcnow(),
+                    "exp": datetime.utcnow() + timedelta(minutes=config.OTP_EXPIRES_MINUTES),
+                    "jti": uuid.uuid4().hex,
+                },
+                config.JWT_PRIVATE_KEY,
+                algorithm=config.JWT_ALGORITHM,
+            )
+            return RedirectResponse(url=f"/reset-password?token={reset_token}", status_code=303)
+
+        attempts += 1
+        db = get_db()
+        cur = db.cursor()
+        if attempts >= config.OTP_MAX_ATTEMPTS:
+            cur.execute("UPDATE users SET otp=NULL, otp_attempts=0, otp_expires_at=NULL WHERE email=%s", (email,))
+            db.commit()
+            db.close()
+            return RedirectResponse(url=f"/verify-reset-otp?email={email}&error=Too many invalid attempts", status_code=303)
+        cur.execute("UPDATE users SET otp_attempts=%s WHERE email=%s", (attempts, email))
+        db.commit()
+        db.close()
+        return RedirectResponse(url=f"/verify-reset-otp?email={email}&error=Invalid OTP", status_code=303)
     
     return RedirectResponse(url=f"/verify-reset-otp?email={email}&error=Invalid OTP", status_code=303)
 
 
 @router.get("/reset-password", response_class=HTMLResponse)
-async def reset_password_page(request: Request, email: str, otp: str, error: Optional[str] = None):
+async def reset_password_page(request: Request, token: str, error: Optional[str] = None):
     """Display new password entry page"""
-    return templates.TemplateResponse("reset_password.html", {"request": request, "email": email, "otp": otp, "error": error})
+    return _render_template_with_csrf(request, "reset_password.html", {"request": request, "token": token, "error": error})
 
 
 @router.post("/reset-password")
-async def reset_password(email: str = Form(...), otp: str = Form(...), password: str = Form(...)):
+async def reset_password(request: Request, token: str = Form(...), password: str = Form(...), csrf_token: str = Form(...)):
     """Update user password after OTP verification"""
+    validate_csrf(request, csrf_token)
+
+    try:
+        payload = jwt.decode(token, config.JWT_PUBLIC_KEY, algorithms=[config.JWT_ALGORITHM])
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid reset token")
+
+    if payload.get("typ") != "password_reset":
+        raise HTTPException(status_code=400, detail="Invalid reset token")
+
+    email = payload.get("sub")
+    if not email:
+        raise HTTPException(status_code=400, detail="Invalid reset token")
+
     db = get_db()
     cur = db.cursor()
     cur.execute("SELECT otp FROM users WHERE email=%s", (email,))
     user = cur.fetchone()
     
-    if user and user[0] and pwd_context.verify(otp, user[0]):
+    if user and user[0]:
         hashed_password = pwd_context.hash(password)
         # Clear OTP after successful reset and update password
-        cur.execute("UPDATE users SET password=%s, otp=NULL WHERE email=%s", (hashed_password, email))
+        cur.execute("UPDATE users SET password=%s, otp=NULL, otp_attempts=0, otp_expires_at=NULL, password_changed_at=CURRENT_TIMESTAMP WHERE email=%s", (hashed_password, email))
         db.commit()
         db.close()
+        increment_user_token_version(email)
+        revoke_user_refresh_sessions(email)
         return RedirectResponse(url="/?message=Password updated successfully", status_code=303)
     
     db.close()
@@ -290,7 +380,7 @@ async def dashboard(request: Request, access_token: Optional[str] = Cookie(None)
     if not user:
         return RedirectResponse(url="/login", status_code=303)
     
-    return templates.TemplateResponse("index.html", {
+    return _render_template_with_csrf(request, "index.html", {
         "request": request,
         "user": user,
         "default_settings": DEFAULT_SETTINGS,
@@ -299,17 +389,51 @@ async def dashboard(request: Request, access_token: Optional[str] = Cookie(None)
 
 
 @router.post("/logout")
-async def logout():
+async def logout(request: Request, csrf_token: str = Form(...), refresh_token: Optional[str] = Cookie(None)):
     """
     Logout user by clearing access token cookie
     
     Returns:
         Redirect to login page with cleared cookies
     """
+    validate_csrf(request, csrf_token)
+
+    if refresh_token:
+        revoke_refresh_session(refresh_token)
+
     response = RedirectResponse(url="/", status_code=303)
-    response.delete_cookie("access_token")
-    response.delete_cookie("user_email")
+    clear_auth_cookies(response)
     return response
+
+
+@router.post("/api/auth/refresh")
+async def refresh_auth(request: Request, refresh_token: Optional[str] = Cookie(None), csrf_token: str = Form(...)):
+    """Rotate refresh token and mint a new access token."""
+    validate_csrf(request, csrf_token)
+
+    if not refresh_token:
+        raise HTTPException(status_code=401, detail="Missing refresh token")
+
+    if not validate_refresh_session(refresh_token):
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+
+    payload = verify_refresh_token(refresh_token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+
+    email = payload["sub"]
+    access_token = create_access_token(email, token_version=int(payload.get("ver", 0)))
+    new_refresh_token = create_refresh_token(email, token_version=int(payload.get("ver", 0)))
+
+    revoke_refresh_session(refresh_token)
+    create_refresh_session(new_refresh_token, request)
+
+    response = {"success": True}
+    from fastapi.responses import JSONResponse
+
+    resp = JSONResponse(content=response)
+    set_auth_cookies(resp, access_token, new_refresh_token, email, ensure_csrf_token(request))
+    return resp
 
 
 # ============ PROFILE ROUTES ============
@@ -355,6 +479,8 @@ async def save_profile(request: Request, access_token: Optional[str] = Cookie(No
     user_email = get_current_user(access_token)
     if not user_email:
         raise HTTPException(status_code=401, detail="Not authenticated")
+
+    validate_csrf(request, request.headers.get("x-csrf-token"))
     
     form = await request.form()
     display_name = form.get("display_name", "")
@@ -454,6 +580,8 @@ async def save_mesh_alignment(request: Request, access_token: Optional[str] = Co
     if not user_email:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
+    validate_csrf(request, request.headers.get("x-csrf-token"))
+
     try:
         payload = await request.json()
     except Exception:
@@ -488,11 +616,13 @@ async def save_mesh_alignment(request: Request, access_token: Optional[str] = Co
 
 
 @router.delete("/api/mesh-alignment")
-async def delete_mesh_alignment(mesh_key: str, access_token: Optional[str] = Cookie(None)):
+async def delete_mesh_alignment(request: Request, mesh_key: str, access_token: Optional[str] = Cookie(None)):
     """Delete saved cloud mesh alignment for current user and mesh key."""
     user_email = get_current_user(access_token)
     if not user_email:
         raise HTTPException(status_code=401, detail="Not authenticated")
+
+    validate_csrf(request, request.headers.get("x-csrf-token"))
 
     mesh_key = (mesh_key or '').strip()
     if not mesh_key:

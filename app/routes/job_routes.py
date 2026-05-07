@@ -14,9 +14,10 @@ import re
 
 from app.config import PROCESSED_FOLDER, UPLOAD_FOLDER, TEMPLATES_FOLDER
 from app.storage import supabase, SUPABASE_BUCKET, get_base_url
-from app.services.gpr_processor import processing_jobs
+from app.services.job_queue import cancel_queued_job, get_job_snapshot
 from app.services.viewer_generator import create_vr_viewer
 from app.routes.auth_routes import get_current_user
+from app.utils.auth_security import validate_csrf
 from app.database import get_db
 from app.models import SavedViewRequest
 from app.utils.file_utils import secure_filename
@@ -38,24 +39,10 @@ async def get_status(job_id: str):
     Returns:
         Status dictionary with processing information
     """
-    # Base status from memory (might be just 'pending')
-    status = {}
-    if job_id in processing_jobs:
-        status = processing_jobs[job_id].copy()
-    
-    # Try to read updated status from disk (written by worker process)
-    status_file = os.path.join(PROCESSED_FOLDER, job_id, "status.json")
-    if os.path.exists(status_file):
-        try:
-            with open(status_file, 'r') as f:
-                disk_status = json.load(f)
-                status.update(disk_status)
-        except:
-            pass
-    
-    if not status and not os.path.exists(status_file):
+    status = get_job_snapshot(job_id)
+    if not status:
         raise HTTPException(status_code=404, detail="Job not found")
-        
+
     return status
 
 
@@ -397,19 +384,22 @@ async def download_result(job_id: str):
 
 
 @router.get("/cleanup/{job_id}")
-async def cleanup_job(job_id: str, access_token: Optional[str] = Cookie(None)):
+async def cleanup_job(job_id: str, request: Request, access_token: Optional[str] = Cookie(None)):
     """
     Cleanup all files for a job (Local and Supabase)
     """
+    validate_csrf(request, request.headers.get("x-csrf-token"))
     return await _perform_cleanup(job_id, access_token)
 
 
 @router.post("/api/cleanup-batch")
-async def batch_cleanup_jobs(request: dict, access_token: Optional[str] = Cookie(None)):
+async def batch_cleanup_jobs(request: Request, payload: dict, access_token: Optional[str] = Cookie(None)):
     """
     Cleanup multiple jobs at once
     """
-    job_ids = request.get("job_ids", [])
+    validate_csrf(request, request.headers.get("x-csrf-token"))
+
+    job_ids = payload.get("job_ids", [])
     if not job_ids:
         return {"success": False, "message": "No job IDs provided"}
     
@@ -462,10 +452,9 @@ async def _perform_cleanup(job_id: str, access_token: Optional[str] = Cookie(Non
         try: os.remove(zip_file)
         except: pass
     
-    # 5. Remove from in-memory
-    if job_id in processing_jobs:
-        del processing_jobs[job_id]
-        
+    # 5. Cancel any queued work before removing local metadata
+    cancel_queued_job(job_id)
+
     # 6. Remove from Database
     try:
         db = get_db()
@@ -519,22 +508,24 @@ def _remove_supabase_files(file_paths):
 # ============ SAVED VIEWS API ============
 
 @router.post("/api/saved-views")
-async def save_view(request: SavedViewRequest, access_token: Optional[str] = Cookie(None)):
+async def save_view(request: Request, payload: SavedViewRequest, access_token: Optional[str] = Cookie(None)):
     """
     Save a new named multi-grid view
     """
+    validate_csrf(request, request.headers.get("x-csrf-token"))
+
     user = get_current_user(access_token)
     if not user:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    job_ids_str = ",".join(request.job_ids)
+    job_ids_str = ",".join(payload.job_ids)
     
     try:
         db = get_db()
         cur = db.cursor()
         cur.execute(
             "INSERT INTO saved_views (user_email, view_name, job_ids) VALUES (%s, %s, %s)",
-            (user, request.name, job_ids_str)
+            (user, payload.name, job_ids_str)
         )
         db.commit()
         db.close()
@@ -579,10 +570,12 @@ async def list_saved_views(access_token: Optional[str] = Cookie(None)):
 
 
 @router.delete("/api/saved-views/{view_id}")
-async def delete_saved_view(view_id: int, access_token: Optional[str] = Cookie(None)):
+async def delete_saved_view(request: Request, view_id: int, access_token: Optional[str] = Cookie(None)):
     """
     Delete a saved view
     """
+    validate_csrf(request, request.headers.get("x-csrf-token"))
+
     user = get_current_user(access_token)
     if not user:
         raise HTTPException(status_code=401, detail="Unauthorized")
@@ -669,6 +662,7 @@ def _safe_user_dirname(user_email: str) -> str:
 
 @router.post("/api/branch-solids/save")
 async def save_branch_solid(
+    request: Request,
     model_file: UploadFile = File(...),
     name: str = Form("combined_branches"),
     source_job_id: str = Form(""),
@@ -680,6 +674,8 @@ async def save_branch_solid(
     user = get_current_user(access_token)
     if not user:
         raise HTTPException(status_code=401, detail="Unauthorized")
+
+    validate_csrf(request, request.headers.get("x-csrf-token"))
 
     if not model_file.filename:
         raise HTTPException(status_code=400, detail="No model file provided")
@@ -790,11 +786,13 @@ async def download_branch_solid(asset_name: str, access_token: Optional[str] = C
 
 
 @router.delete("/api/branch-solids/{asset_name}")
-async def delete_branch_solid(asset_name: str, access_token: Optional[str] = Cookie(None)):
+async def delete_branch_solid(request: Request, asset_name: str, access_token: Optional[str] = Cookie(None)):
     """Delete a branch solid asset owned by the current user."""
     user = get_current_user(access_token)
     if not user:
         raise HTTPException(status_code=401, detail="Unauthorized")
+
+    validate_csrf(request, request.headers.get("x-csrf-token"))
 
     safe_asset = secure_filename(os.path.basename(asset_name))
     safe_user = _safe_user_dirname(user)

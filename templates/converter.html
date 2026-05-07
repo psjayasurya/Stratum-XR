@@ -516,6 +516,7 @@
         </div>
 
         <form method="POST" action="/logout" style="margin: 0;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <button type="submit" class="logout-btn">
                 <i class="fas fa-power-off"></i> Logout
             </button>
@@ -587,6 +588,23 @@
     </div>
 
     <script>
+        function getCookie(name) {
+            return document.cookie.split('; ').reduce((value, entry) => {
+                const [cookieName, ...cookieValueParts] = entry.split('=');
+                if (cookieName === name) {
+                    return decodeURIComponent(cookieValueParts.join('='));
+                }
+                return value;
+            }, '');
+        }
+
+        function csrfHeaders(extraHeaders = {}) {
+            return {
+                ...extraHeaders,
+                'X-CSRF-Token': getCookie('csrf_token')
+            };
+        }
+
         function updateFileName() {
             const input = document.getElementById('fileInput');
             const display = document.getElementById('fileNameDisplay');
@@ -660,6 +678,7 @@
             try {
                 const response = await fetch('/tools/survey_boundary', {
                     method: 'POST',
+                    headers: csrfHeaders(),
                     body: formData
                 });
 

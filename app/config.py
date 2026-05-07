@@ -10,13 +10,57 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
+# ============ RSA KEY LOADER ============
+def load_rsa_keys():
+    """
+    Load RSA keys from environment variables or files
+    Returns: (private_key, public_key) tuple
+    """
+    # Try loading from environment variables first (recommended for production)
+    private_key = os.getenv("JWT_PRIVATE_KEY")
+    public_key = os.getenv("JWT_PUBLIC_KEY")
+    
+    if private_key and public_key:
+        return private_key, public_key
+    
+    # Fall back to loading from files (for development)
+    # config.py is in app/ so go up 1 level to get to project root
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    private_key_file = os.path.join(project_root, 'private.pem')
+    public_key_file = os.path.join(project_root, 'public.pem')
+    
+    try:
+        with open(private_key_file, 'r') as f:
+            private_key = f.read()
+        with open(public_key_file, 'r') as f:
+            public_key = f.read()
+        return private_key, public_key
+    except FileNotFoundError:
+        raise FileNotFoundError(
+            f"RSA keys not found. Please:\n"
+            f"  1. Run: python generate_rsa_keys.py\n"
+            f"  2. Or set JWT_PRIVATE_KEY and JWT_PUBLIC_KEY environment variables"
+        )
+
 # ============ CONFIG CLASS ============
 class Config:
     """Application configuration from environment variables"""
     SECRET_KEY = os.getenv("SECRET_KEY", "")
-    JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "")
-    JWT_ALGORITHM = "HS256"
+    COOKIE_SECURE = os.getenv("COOKIE_SECURE", "false").lower() == "true"
+    COOKIE_SAMESITE = os.getenv("COOKIE_SAMESITE", "lax").lower()
+    
+    # JWT Configuration - RS256 (RSA with SHA256)
+    JWT_ALGORITHM = "RS256"
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=24)
+    JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=7)
+    JWT_PRIVATE_KEY, JWT_PUBLIC_KEY = load_rsa_keys()
+
+    OTP_EXPIRES_MINUTES = int(os.getenv("OTP_EXPIRES_MINUTES", "10"))
+    OTP_MAX_ATTEMPTS = int(os.getenv("OTP_MAX_ATTEMPTS", "5"))
+    
+    # Legacy HS256 key (deprecated, kept for backwards compatibility)
+    JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "")
+    
     DATABASE_URL = os.getenv("DATABASE_URL", "")
     MAIL_SERVER = os.getenv("MAIL_SERVER", "")
     MAIL_PORT = int(os.getenv("MAIL_PORT", 587))

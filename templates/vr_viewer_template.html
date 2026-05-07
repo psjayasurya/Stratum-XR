@@ -2018,8 +2018,10 @@
                 <i class="fas fa-user" id="profileIconPlaceholder"></i>
                 <img id="profileIconImg" src="" alt="" style="display:none;">
             </button>
-            <form id="logout-form" method="POST" action="/logout" style="display: none;"></form>
-            <button class="logout-btn" onclick="document.getElementById('logout-form').submit();" title="Logout">
+            <form id="logout-form" method="POST" action="/logout" style="display: none;">
+                <input type="hidden" name="csrf_token" id="logout-csrf-token" value="">
+            </form>
+            <button class="logout-btn" onclick="submitLogoutForm();" title="Logout">
                 <i class="fas fa-sign-out-alt"></i> Log Out
             </button>
         </div>
@@ -2250,8 +2252,12 @@
                 <div class="slider-label"><span>Smoothness</span><span id="solidSmoothnessValue">80</span></div>
                 <input type="range" id="solidSmoothness" min="0" max="100" step="1" value="80" oninput="updateSolidSmoothness(this.value)">
             </div>
+            <div class="slider-container">
+                <div class="slider-label"><span>Boundary Depth (m)</span><span id="boundaryDepthValue">1.0</span></div>
+                <input type="range" id="boundaryDepthSlider" min="0.1" max="10" step="0.1" value="1.0" oninput="document.getElementById('boundaryDepthValue').textContent=this.value">
+            </div>
             <div class="control-group" style="margin-top: 8px; border-top: 1px solid #374151; padding-top: 8px;">
-                <div class="control-group-title" style="color: #22d3ee;">Branch Region Draw (Independent)</div>
+                <div class="control-group-title" style="color: #22d3ee;">Boundary Construction</div>
                 <div style="font-size: 10px; color: #9ca3af; margin-bottom: 6px; line-height: 1.4;">
                     Draw branch regions directly for Solid Construction without using Lasso Remove.
                 </div>
@@ -2281,6 +2287,8 @@
             <div style="display: flex; gap: 6px; margin-top: 6px;">
                 <button class="btn-small" onclick="buildSolidFromExtraction()" style="flex: 1; background: #f97316; color: #fff; font-weight: 700;">Build Solid</button>
                 <button class="btn-small" onclick="buildBranchSolidsFromRegions()" style="flex: 1; background: #fb7185; color: #fff; font-weight: 700;">Build Branch Solids</button>
+                <button class="btn-small" onclick="create3DBoundaryFromSelectedRegion()" style="flex: 1; background: #06b6d4; color: #fff; font-weight: 700;">Create 3D Boundary</button>
+                <button class="btn-small" onclick="startBoundaryAreaSelection()" style="flex: 1; background: #10b981; color: #fff; font-weight: 700;">Select Area (Map)</button>
                 <button class="btn-small" onclick="clearSolidReconstruction()" style="flex: 1;">Undo Solid</button>
             </div>
             <div class="slider-container" style="margin-top: 8px; border-top: 1px solid #374151; padding-top: 8px;">
@@ -2306,6 +2314,36 @@
             <div style="display: flex; gap: 6px; margin-top: 6px;">
                 <button class="btn-small" onclick="applySelectedBranchMove()" style="flex: 1; background: #0ea5e9; color: #fff;">Move Selected Solid</button>
                 <button class="btn-small" onclick="combineAndSaveBranchSolids()" style="flex: 1; background: #22c55e; color: #052e16; font-weight: 700;">Combine All Branches + Save</button>
+            </div>
+            <div style="display: flex; gap: 6px; margin-top: 6px;">
+                <button class="btn-small" onclick="exportBoundaries()" style="flex: 1; background: #8b5cf6; color: #fff;">Export Boundaries (JSON)</button>
+                <button class="btn-small" onclick="document.getElementById('boundaryImportFile').click()" style="flex: 1; background: #6366f1; color: #fff;">Import Boundaries</button>
+                <input type="file" id="boundaryImportFile" style="display:none" accept=".json" onchange="importBoundaries(this)">
+            </div>
+            <div style="display: flex; gap: 6px; margin-top: 6px;">
+                <button class="btn-small" onclick="document.getElementById('boundaryKmlInput').click()" style="flex: 1; background: #38bdf8; color: #082f49; font-weight: 700;">Import Boundary (KML)</button>
+                <input type="file" id="boundaryKmlInput" style="display:none" accept=".kml" onchange="importBoundaryKML(this)">
+            </div>
+            <div style="display: flex; gap: 6px; margin-top: 6px;">
+                <button class="btn-small" onclick="exportBoundariesKML()" style="flex: 1; background: #0ea5e9; color: #fff;">Export Boundaries (KML)</button>
+            </div>
+            <div class="control-group" style="margin-top: 8px; border-top: 1px solid #374151; padding-top: 8px;">
+                <div class="control-group-title" style="color: #8b5cf6;">Boundary Library</div>
+                <div style="display: flex; gap: 6px; margin-top: 6px;">
+                    <input id="boundarySaveName" type="text" placeholder="Boundary set name" style="flex: 1; min-width: 0;">
+                    <button class="btn-small" onclick="saveBoundarySet()" style="background: #8b5cf6; color: #fff;">Save Set</button>
+                </div>
+                <div class="slider-container" style="margin-top: 6px;">
+                    <div class="slider-label"><span>Saved Boundary Sets</span><span id="savedBoundarySelectedLabel">None</span></div>
+                    <select id="savedBoundarySelect" onchange="selectSavedBoundarySet(this.value)">
+                        <option value="">No saved boundaries</option>
+                    </select>
+                </div>
+                <div style="display: flex; gap: 6px; margin-top: 6px;">
+                    <button class="btn-small" onclick="loadSelectedBoundarySet()" style="flex: 1; background: #14b8a6; color: #042f2e; font-weight: 700;">Load Saved</button>
+                    <button class="btn-small" onclick="deleteSelectedBoundarySet()" style="flex: 1; background: #ef4444; color: #fff; font-weight: 700;">Delete Saved</button>
+                </div>
+                <div id="savedBoundariesStatus" style="font-size: 10px; color: #c4b5fd; margin-top: 4px;">Saved boundaries: not loaded</div>
             </div>
             <div style="display: flex; gap: 6px; margin-top: 6px;">
                 <button class="btn-small" onclick="refreshSavedBranchSolids()" style="flex: 1;">Refresh Saved Branches</button>
@@ -4785,6 +4823,58 @@
 
         let userEmail = getUserEmail();
 
+        function getCookieValue(name) {
+            return document.cookie.split('; ').reduce((value, entry) => {
+                const [cookieName, ...cookieValueParts] = entry.split('=');
+                if (cookieName === name) {
+                    return decodeURIComponent(cookieValueParts.join('='));
+                }
+                return value;
+            }, '');
+        }
+
+        function csrfHeaders(extraHeaders = {}) {
+            return {
+                ...extraHeaders,
+                'X-CSRF-Token': getCookieValue('csrf_token')
+            };
+        }
+
+        async function refreshAuthSession() {
+            const csrfToken = getCookieValue('csrf_token');
+            const response = await fetch('/api/auth/refresh', {
+                method: 'POST',
+                headers: {
+                    'X-CSRF-Token': csrfToken
+                },
+                body: new URLSearchParams({ csrf_token: csrfToken })
+            });
+
+            return response.ok;
+        }
+
+        async function fetchWithSessionRefresh(url, options = {}, retry = true) {
+            const response = await fetch(url, options);
+            if (response.status !== 401 || !retry) {
+                return response;
+            }
+
+            const refreshed = await refreshAuthSession();
+            if (!refreshed) {
+                return response;
+            }
+
+            return fetch(url, options);
+        }
+
+        window.submitLogoutForm = function () {
+            const tokenField = document.getElementById('logout-csrf-token');
+            if (tokenField) {
+                tokenField.value = getCookieValue('csrf_token');
+            }
+            document.getElementById('logout-form').submit();
+        };
+
         window.notifyUser = function (message) {
             const raw = message == null ? '' : String(message);
             const compact = raw.replace(/\s+/g, ' ').trim();
@@ -4807,7 +4897,7 @@
 
         window.createCollaborationSession = async function () {
             try {
-                const response = await fetch('/session/create', { method: 'POST' });
+                const response = await fetchWithSessionRefresh('/session/create', { method: 'POST', headers: csrfHeaders() });
                 const data = await response.json();
                 currentSessionId = data.session_id;
                 isSessionHost = true;
@@ -5601,8 +5691,9 @@
             momBtn.disabled = true;
 
             try {
-                const response = await fetch(`/session/${currentSessionId}/finalize`, {
-                    method: 'POST'
+                const response = await fetchWithSessionRefresh(`/session/${currentSessionId}/finalize`, {
+                    method: 'POST',
+                    headers: csrfHeaders()
                 });
 
                 const data = await response.json();
@@ -6896,7 +6987,7 @@
             }
 
             try {
-                const res = await fetch('/api/profile', { method: 'POST', body: formData });
+                const res = await fetch('/api/profile', { method: 'POST', headers: csrfHeaders(), body: formData });
                 const data = await res.json();
                 if (data.success) {
                     statusEl.textContent = '✓ Profile saved successfully!';
@@ -9767,7 +9858,7 @@
             btn.textContent = "Uploading...";
             
             try {
-                const res = await fetch('/upload_potree', { method: 'POST', body: formData });
+                const res = await fetchWithSessionRefresh('/upload_potree', { method: 'POST', headers: csrfHeaders(), body: formData });
                 const data = await res.json();
                 if (data.success) {
                     btn.textContent = "Success!";
@@ -12438,8 +12529,9 @@
             formData.append('source_job_id', getActiveJobIdForSave());
 
             try {
-                const res = await fetch('/api/branch-solids/save', {
+                const res = await fetchWithSessionRefresh('/api/branch-solids/save', {
                     method: 'POST',
+                    headers: csrfHeaders(),
                     body: formData
                 });
 
@@ -12578,8 +12670,9 @@
             }
 
             try {
-                const res = await fetch(`/api/branch-solids/${encodeURIComponent(filename)}`, {
-                    method: 'DELETE'
+                const res = await fetchWithSessionRefresh(`/api/branch-solids/${encodeURIComponent(filename)}`, {
+                    method: 'DELETE',
+                    headers: csrfHeaders()
                 });
                 const data = await res.json().catch(() => ({}));
                 if (!res.ok || !data.success) {
@@ -12930,6 +13023,466 @@
                 '#fdba74'
             );
             window.notifyUser(`Built ${built} branch solids. Total solids now: ${existingCount + built}.`);
+        };
+
+        window.create3DBoundaryFromSelectedRegion = function (regionIndex = null) {
+            const regions = (solidReconstructState && Array.isArray(solidReconstructState.branchRegions)) ? solidReconstructState.branchRegions : [];
+            if (!regions.length) {
+                window.notifyUser('No regions defined. Use "Select Area (Map)" first.');
+                return;
+            }
+
+            const region = (regionIndex === null) ? regions[regions.length - 1] : regions[regionIndex];
+            const depthVal = parseFloat(document.getElementById('boundaryDepthSlider')?.value || 1.0);
+
+            // Try to obtain high-resolution world-space points from current data (GPR, LiDAR, or Mesh)
+            let worldPts = [];
+            if (Array.isArray(region.polygonWorld) && region.polygonWorld.length) {
+                // If we have world points, re-sample their Y from the scene objects to ensure Buildings/Objects elevation matching
+                worldPts = region.polygonWorld.map(p => {
+                    const scenePt = pickWorldPointFromClient && projectWorldPointToCanvas ? 
+                        (() => {
+                            const screen = projectWorldPointToCanvas(p);
+                            return screen ? pickWorldPointFromClient(screen.x, screen.y) : p;
+                        })() : p;
+                    return (scenePt || p).clone();
+                });
+            } else {
+                const screenPoly = regionToScreenPoints(region);
+                worldPts = screenPoly.map(p => pickWorldPointFromClient(p.x, p.y)).filter(Boolean);
+            }
+
+            if (!worldPts || worldPts.length < 3) {
+                window.notifyUser('Could not resolve building/object elevation. Try selecting on top of the structure.');
+                return;
+            }
+
+            const topVerts = worldPts.map(p => p.clone());
+            if (!topVerts[0].equals(topVerts[topVerts.length - 1])) topVerts.push(topVerts[0].clone());
+
+            const positions = [];
+            const indices = [];
+            let vi = 0;
+
+            for (let i = 0; i < topVerts.length - 1; i++) {
+                const t0 = topVerts[i];
+                const t1 = topVerts[i + 1];
+                // Extrude vertically down relative to each vertex's exact elevation
+                const b0 = new THREE.Vector3(t0.x, t0.y - depthVal, t0.z);
+                const b1 = new THREE.Vector3(t1.x, t1.y - depthVal, t1.z);
+
+                positions.push(t0.x, t0.y, t0.z, t1.x, t1.y, t1.z, b1.x, b1.y, b1.z, b0.x, b0.y, b0.z);
+                indices.push(vi, vi + 1, vi + 2, vi, vi + 2, vi + 3);
+                vi += 4;
+            }
+
+            const geom = new THREE.BufferGeometry();
+            geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+            geom.setIndex(indices);
+            geom.computeVertexNormals();
+
+            const mesh = new THREE.Mesh(geom, new THREE.MeshStandardMaterial({
+                color: 0x06b6d4, flatShading: true, side: THREE.DoubleSide, transparent: true, opacity: 0.9
+            }));
+            
+            const boundaryId = Date.now();
+            mesh.name = `boundary_obj_${boundaryId}`;
+            // Store metadata for export
+            mesh.userData = { 
+                type: '3d_boundary', 
+                depth: depthVal, 
+                worldPoints: worldPts.map(p => ({x: p.x, y: p.y, z: p.z})) 
+            };
+            
+            scene.add(mesh);
+            if (!solidReconstructState.meshes) solidReconstructState.meshes = [];
+            solidReconstructState.meshes.push(mesh);
+
+            // Sharp edge highlight
+            const edgeLine = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(topVerts), 
+                new THREE.LineBasicMaterial({ color: 0x00ffff, linewidth: 2 }));
+            edgeLine.name = `boundary_edge_${boundaryId}`;
+            scene.add(edgeLine);
+
+            setSolidReconstructStatus('Object Boundary created at exact elevation', '#00ffff');
+            refreshBranchSolidSelect && refreshBranchSolidSelect();
+        };
+
+        window.exportBoundaries = function() {
+            const boundaries = (solidReconstructState.meshes || [])
+                .filter(m => m.userData && m.userData.type === '3d_boundary')
+                .map(m => m.userData);
+            
+            if (!boundaries.length) {
+                window.notifyUser('No boundaries to export.');
+                return;
+            }
+
+            const blob = new Blob([JSON.stringify(boundaries, null, 2)], {type: 'application/json'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `boundaries_${new Date().getTime()}.json`;
+            a.click();
+            window.notifyUser(`Exported ${boundaries.length} boundaries.`);
+        };
+
+                function boundaryPointToGeo(point) {
+                        const origin = (typeof geoOrigin !== 'undefined' && (geoOrigin.lat !== 0 || geoOrigin.lon !== 0))
+                                ? geoOrigin
+                                : (typeof mapOrigin !== 'undefined' ? mapOrigin : { lat: 0, lon: 0, alt: 0 });
+                        const R = 6378137;
+                        const lat = origin.lat + (-point.z / R) * (180 / Math.PI);
+                        const lon = origin.lon + (point.x / (R * Math.cos(origin.lat * Math.PI / 180))) * (180 / Math.PI);
+                        const alt = (origin.alt || 0) + point.y;
+                        return { lat, lon, alt };
+                }
+
+                window.exportBoundariesKML = function () {
+                        const origin = (typeof geoOrigin !== 'undefined' && (geoOrigin.lat !== 0 || geoOrigin.lon !== 0))
+                                ? geoOrigin
+                                : (typeof mapOrigin !== 'undefined' ? mapOrigin : null);
+
+                        if (!origin || (origin.lat === 0 && origin.lon === 0)) {
+                                window.notifyUser('No geo-reference anchor set. KML will be exported near 0,0 unless you set the Geo tab origin.');
+                        }
+
+                        const boundaries = (solidReconstructState.meshes || [])
+                                .filter(m => m.userData && m.userData.type === '3d_boundary')
+                                .map(m => ({
+                                        name: m.name || 'Boundary',
+                                        points: (m.userData.worldPoints || []).map(p => ({ x: p.x, y: p.y, z: p.z }))
+                                }))
+                                .filter(b => b.points.length >= 3);
+
+                        if (!boundaries.length) {
+                                window.notifyUser('No boundaries to export.');
+                                return;
+                        }
+
+                        const escapeXml = s => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+                        let kml = `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+<Document>
+    <name>Stratum XR Boundaries</name>
+    <Style id="boundary">
+        <LineStyle><color>ff00ffff</color><width>2</width></LineStyle>
+        <PolyStyle><color>4000ffff</color></PolyStyle>
+    </Style>
+`;
+
+                        boundaries.forEach((b, idx) => {
+                                const geoPts = b.points.map(p => boundaryPointToGeo(p));
+                                const coordStr = geoPts.map(g => `${g.lon.toFixed(8)},${g.lat.toFixed(8)},${g.alt.toFixed(3)}`).join(' ');
+                                const closed = coordStr + ' ' + `${geoPts[0].lon.toFixed(8)},${geoPts[0].lat.toFixed(8)},${geoPts[0].alt.toFixed(3)}`;
+                                const name = b.name || `Boundary_${idx + 1}`;
+                                kml += `  <Placemark>
+        <name>${escapeXml(name)}</name>
+        <styleUrl>#boundary</styleUrl>
+        <Polygon>
+            <tessellate>1</tessellate>
+            <altitudeMode>relativeToGround</altitudeMode>
+            <outerBoundaryIs>
+                <LinearRing>
+                    <coordinates>${closed}</coordinates>
+                </LinearRing>
+            </outerBoundaryIs>
+        </Polygon>
+    </Placemark>
+`;
+                        });
+
+                        kml += `</Document>
+</kml>`;
+
+                        const blob = new Blob([kml], { type: 'application/vnd.google-earth.kml+xml' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `boundaries_${new Date().toISOString().split('T')[0]}.kml`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                };
+
+                    function parseKmlCoordinates(text) {
+                        if (!text) return [];
+                        return text
+                            .trim()
+                            .split(/\s+/)
+                            .map(token => token.split(','))
+                            .map(parts => ({
+                                lon: Number(parts[0]),
+                                lat: Number(parts[1]),
+                                alt: Number(parts[2] || 0)
+                            }))
+                            .filter(p => Number.isFinite(p.lon) && Number.isFinite(p.lat));
+                    }
+
+                    function kmlGeoToScenePoints(geoPoints) {
+                        const origin = (typeof geoOrigin !== 'undefined' && (geoOrigin.lat !== 0 || geoOrigin.lon !== 0))
+                            ? geoOrigin
+                            : (typeof mapOrigin !== 'undefined' ? mapOrigin : { lat: 0, lon: 0, alt: 0 });
+                        return geoPoints.map(p => {
+                            const meters = latLonToMeters({ lat: p.lat, lon: p.lon }, origin);
+                            const y = (p.alt || 0) - (origin.alt || 0);
+                            return new THREE.Vector3(meters.x, y, meters.z);
+                        });
+                    }
+
+                    function buildBoundaryFromScenePoints(scenePoints) {
+                        if (!Array.isArray(scenePoints) || scenePoints.length < 3) return false;
+                        const pts = scenePoints.slice();
+                        const first = pts[0];
+                        const last = pts[pts.length - 1];
+                        if (first && last && first.distanceTo(last) < 0.0001) {
+                            pts.pop();
+                        }
+
+                        const fakeRegion = { polygonWorld: pts };
+                        if (!solidReconstructState.branchRegions) solidReconstructState.branchRegions = [];
+                        solidReconstructState.branchRegions.push(fakeRegion);
+                        window.create3DBoundaryFromSelectedRegion(solidReconstructState.branchRegions.length - 1);
+                        return true;
+                    }
+
+                    window.importBoundaryKML = function (input) {
+                        const file = input.files[0];
+                        if (!file) return;
+
+                        const origin = (typeof geoOrigin !== 'undefined' && (geoOrigin.lat !== 0 || geoOrigin.lon !== 0))
+                            ? geoOrigin
+                            : (typeof mapOrigin !== 'undefined' ? mapOrigin : null);
+
+                        if (!origin || (origin.lat === 0 && origin.lon === 0)) {
+                            window.notifyUser('No geo-reference anchor set. KML will be placed near 0,0 unless you set the Geo tab origin.');
+                        }
+
+                        file.text().then(text => {
+                            const parser = new DOMParser();
+                            const doc = parser.parseFromString(text, 'text/xml');
+                            const coordNodes = Array.from(doc.getElementsByTagName('coordinates'));
+                            if (!coordNodes.length) {
+                                window.notifyUser('No coordinates found in KML.');
+                                return;
+                            }
+
+                            let created = 0;
+                            coordNodes.forEach(node => {
+                                const coords = parseKmlCoordinates(node.textContent || '');
+                                if (coords.length < 3) return;
+                                const scenePoints = kmlGeoToScenePoints(coords);
+                                if (buildBoundaryFromScenePoints(scenePoints)) created += 1;
+                            });
+
+                            if (!created) {
+                                window.notifyUser('KML import found no valid boundary polygons.');
+                            } else {
+                                window.notifyUser(`Imported ${created} KML boundary${created > 1 ? 'ies' : ''}.`);
+                            }
+                        }).catch(err => {
+                            window.notifyUser(`KML import failed: ${err.message || err}`);
+                        }).finally(() => {
+                            input.value = '';
+                        });
+                    };
+
+        window.importBoundaries = function(input) {
+            const file = input.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    if (!Array.isArray(data)) throw new Error('Invalid format');
+                    
+                    data.forEach(item => {
+                        if (item.type !== '3d_boundary' || !item.worldPoints) return;
+                        
+                        // Fake a region in solidReconstructState.branchRegions to reuse create3DBoundary logic
+                        const fakeRegion = {
+                            polygonWorld: item.worldPoints.map(p => new THREE.Vector3(p.x, p.y, p.z))
+                        };
+                        
+                        if (!solidReconstructState.branchRegions) solidReconstructState.branchRegions = [];
+                        solidReconstructState.branchRegions.push(fakeRegion);
+                        
+                        // Temporary override slider value if needed or use item.depth
+                        const oldDepth = document.getElementById('boundaryDepthSlider').value;
+                        document.getElementById('boundaryDepthSlider').value = item.depth || 1.0;
+                        
+                        window.create3DBoundaryFromSelectedRegion(solidReconstructState.branchRegions.length - 1);
+                        
+                        document.getElementById('boundaryDepthSlider').value = oldDepth;
+                    });
+                    
+                    window.notifyUser(`Successfully imported ${data.length} boundaries.`);
+                } catch (err) {
+                    window.notifyUser('Error importing boundaries: ' + err.message);
+                }
+            };
+            reader.readAsText(file);
+            input.value = ''; // Reset input
+        };
+
+        const BOUNDARY_STORAGE_KEY = 'stratum_saved_boundaries';
+
+        function getSavedBoundarySets() {
+            try {
+                const raw = localStorage.getItem(BOUNDARY_STORAGE_KEY);
+                const data = JSON.parse(raw || '[]');
+                return Array.isArray(data) ? data : [];
+            } catch (e) {
+                return [];
+            }
+        }
+
+        function setSavedBoundarySets(list) {
+            try {
+                localStorage.setItem(BOUNDARY_STORAGE_KEY, JSON.stringify(list));
+            } catch (e) {
+                window.notifyUser('Failed to save boundaries locally.');
+            }
+        }
+
+        function refreshSavedBoundarySelect() {
+            const selectEl = document.getElementById('savedBoundarySelect');
+            const labelEl = document.getElementById('savedBoundarySelectedLabel');
+            const statusEl = document.getElementById('savedBoundariesStatus');
+            if (!selectEl) return;
+
+            const sets = getSavedBoundarySets();
+            selectEl.innerHTML = '';
+            if (!sets.length) {
+                selectEl.innerHTML = '<option value="">No saved boundaries</option>';
+                if (labelEl) labelEl.textContent = 'None';
+                if (statusEl) statusEl.textContent = 'Saved boundaries: 0';
+                return;
+            }
+
+            sets.forEach((set, idx) => {
+                const opt = document.createElement('option');
+                opt.value = set.name;
+                opt.textContent = `${idx + 1}. ${set.name}`;
+                selectEl.appendChild(opt);
+            });
+
+            if (!selectEl.value && sets.length) {
+                selectEl.value = sets[0].name;
+            }
+            if (labelEl) labelEl.textContent = selectEl.value || 'None';
+            if (statusEl) statusEl.textContent = `Saved boundaries: ${sets.length}`;
+        }
+
+        window.saveBoundarySet = function () {
+            const nameInput = document.getElementById('boundarySaveName');
+            const name = (nameInput && nameInput.value ? nameInput.value.trim() : '') || `boundary_set_${Date.now()}`;
+
+            const boundaries = (solidReconstructState.meshes || [])
+                .filter(m => m.userData && m.userData.type === '3d_boundary')
+                .map(m => m.userData);
+
+            if (!boundaries.length) {
+                window.notifyUser('No boundaries to save.');
+                return;
+            }
+
+            const sets = getSavedBoundarySets();
+            const existingIdx = sets.findIndex(s => s.name === name);
+            const entry = { name, createdAt: new Date().toISOString(), items: boundaries };
+            if (existingIdx >= 0) {
+                sets[existingIdx] = entry;
+            } else {
+                sets.push(entry);
+            }
+
+            setSavedBoundarySets(sets);
+            refreshSavedBoundarySelect();
+            if (nameInput) nameInput.value = '';
+            window.notifyUser(`Saved boundary set: ${name}`);
+        };
+
+        window.selectSavedBoundarySet = function (name) {
+            const labelEl = document.getElementById('savedBoundarySelectedLabel');
+            if (labelEl) labelEl.textContent = name || 'None';
+        };
+
+        function buildBoundaryFromData(item) {
+            if (!item || item.type !== '3d_boundary' || !Array.isArray(item.worldPoints)) return false;
+            const fakeRegion = {
+                polygonWorld: item.worldPoints.map(p => new THREE.Vector3(p.x, p.y, p.z))
+            };
+            if (!solidReconstructState.branchRegions) solidReconstructState.branchRegions = [];
+            solidReconstructState.branchRegions.push(fakeRegion);
+
+            const depthSlider = document.getElementById('boundaryDepthSlider');
+            const oldDepth = depthSlider ? depthSlider.value : null;
+            if (depthSlider) depthSlider.value = item.depth || 1.0;
+
+            window.create3DBoundaryFromSelectedRegion(solidReconstructState.branchRegions.length - 1);
+
+            if (depthSlider && oldDepth !== null) depthSlider.value = oldDepth;
+            return true;
+        }
+
+        window.loadSelectedBoundarySet = function () {
+            const selectEl = document.getElementById('savedBoundarySelect');
+            const name = selectEl ? selectEl.value : '';
+            if (!name) {
+                window.notifyUser('Select a saved boundary set first.');
+                return;
+            }
+
+            const sets = getSavedBoundarySets();
+            const entry = sets.find(s => s.name === name);
+            if (!entry || !Array.isArray(entry.items)) {
+                window.notifyUser('Saved boundary set not found.');
+                return;
+            }
+
+            let loaded = 0;
+            entry.items.forEach(item => {
+                if (buildBoundaryFromData(item)) loaded += 1;
+            });
+
+            window.notifyUser(`Loaded ${loaded} boundaries from ${name}.`);
+        };
+
+        window.deleteSelectedBoundarySet = function () {
+            const selectEl = document.getElementById('savedBoundarySelect');
+            const name = selectEl ? selectEl.value : '';
+            if (!name) {
+                window.notifyUser('Select a saved boundary set first.');
+                return;
+            }
+
+            const sets = getSavedBoundarySets().filter(s => s.name !== name);
+            setSavedBoundarySets(sets);
+            refreshSavedBoundarySelect();
+            window.notifyUser(`Deleted boundary set: ${name}`);
+        };
+
+        refreshSavedBoundarySelect();
+
+        window.startBoundaryAreaSelection = function() {
+            window.notifyUser('Click/Draw a region on the base map to create a boundary.');
+            // This triggers the lasso/branch draw UI specifically for boundary creation
+            if (typeof startSolidBranchDraw === 'function') {
+                startSolidBranchDraw();
+                // Set a listener to auto-create boundary when finished
+                const originalFinish = window.finishSolidBranchDraw;
+                window.finishSolidBranchDraw = function() {
+                    originalFinish();
+                    // Restore original finish function
+                    window.finishSolidBranchDraw = originalFinish;
+                    // Automatically add region and build boundary
+                    if (typeof addBranchRegionFromSolidDraw === 'function') {
+                        addBranchRegionFromSolidDraw();
+                        setTimeout(() => window.create3DBoundaryFromSelectedRegion(), 100);
+                    }
+                };
+            }
         };
 
         // Sync branch selection mode UI defaults.
@@ -14236,9 +14789,9 @@
             };
 
             try {
-                const res = await fetch('/api/mesh-alignment', {
+                const res = await fetchWithSessionRefresh('/api/mesh-alignment', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: csrfHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify(payload)
                 });
                 if (res.status === 401) {
@@ -14328,8 +14881,9 @@
                 return;
             }
             try {
-                const res = await fetch(`/api/mesh-alignment?mesh_key=${encodeURIComponent(meshKey)}`, {
-                    method: 'DELETE'
+                const res = await fetchWithSessionRefresh(`/api/mesh-alignment?mesh_key=${encodeURIComponent(meshKey)}`, {
+                    method: 'DELETE',
+                    headers: csrfHeaders()
                 });
                 if (res.status === 401) {
                     window.notifyUser('Please login to delete saved mesh alignment.');
@@ -15744,7 +16298,7 @@
                 this.panelGroup = new THREE.Group();
                 this.canvas = document.createElement('canvas');
                 this.canvas.width = 1024;
-                this.canvas.height = 1024;
+                this.canvas.height = 1280;
                 this.ctx = this.canvas.getContext('2d');
                 this.texture = new THREE.CanvasTexture(this.canvas);
 
@@ -15763,7 +16317,7 @@
                     { id: 'about', label: 'Info' }
                 ];
                 this.tabRects = [];
-                this.closeRect = { x: 736, y: 922, w: 240, h: 74 };
+                this.closeRect = { x: 736, y: 1168, w: 240, h: 74 };
                 this.lastOpenedTab = '';
                 this.statusMessage = '';
                 this.mode = 'menu';
@@ -15771,6 +16325,8 @@
                 this.buttons = [];
                 this.pointShapes = ['square', 'circle', 'diamond', 'cross', 'plus'];
                 this.sliceSliderRect = null;
+                this.tabPages = { solids: 0 };
+                this.tabPageCounts = { solids: 2 };
 
                 // Keyboard state for VR text input
                 this.keyboardMode = null;  // 'label', 'note', 'collab_join'
@@ -15782,7 +16338,7 @@
                     ['Z', 'X', 'C', 'V', 'B', 'N', 'M', ' ', '←', '–']
                 ];
 
-                const panelGeo = new THREE.PlaneGeometry(0.96, 0.96);
+                const panelGeo = new THREE.PlaneGeometry(0.96, 1.20);
                 this.panelMesh = new THREE.Mesh(panelGeo, new THREE.MeshStandardMaterial({
                     map: this.texture,
                     transparent: true,
@@ -15799,10 +16355,10 @@
 
             render() {
                 const ctx = this.ctx;
-                ctx.clearRect(0, 0, 1024, 1024);
+                ctx.clearRect(0, 0, 1024, 1280);
 
-                ctx.fillStyle = 'rgba(10, 15, 25, 0.9)';
-                this.roundRect(ctx, 0, 0, 1024, 1024, 40, true);
+                ctx.fillStyle = 'rgba(10, 15, 25, 0.92)';
+                this.roundRect(ctx, 0, 0, 1024, 1280, 40, true);
 
                 const headGrad = ctx.createLinearGradient(0, 0, 1024, 0);
                 headGrad.addColorStop(0, '#0ea5e9');
@@ -15812,7 +16368,7 @@
 
                 ctx.strokeStyle = 'rgba(255,255,255,0.16)';
                 ctx.lineWidth = 4;
-                this.roundRect(ctx, 2, 2, 1020, 1020, 40, false, true);
+                this.roundRect(ctx, 2, 2, 1020, 1276, 40, false, true);
 
                 ctx.fillStyle = '#ffffff';
                 ctx.font = "700 50px 'Inter', sans-serif";
@@ -15856,14 +16412,14 @@
 
                 if (this.statusMessage) {
                     ctx.fillStyle = 'rgba(15,23,42,0.9)';
-                    this.roundRect(ctx, 44, 902, 936, 74, 14, true);
+                    this.roundRect(ctx, 44, 1148, 936, 74, 14, true);
                     ctx.strokeStyle = 'rgba(56,189,248,0.45)';
                     ctx.lineWidth = 2;
-                    this.roundRect(ctx, 44, 902, 936, 74, 14, false, true);
+                    this.roundRect(ctx, 44, 1148, 936, 74, 14, false, true);
                     ctx.fillStyle = '#e2e8f0';
                     ctx.font = "600 24px 'Inter', sans-serif";
                     ctx.textAlign = 'left';
-                    ctx.fillText(this.statusMessage, 62, 948);
+                    ctx.fillText(this.statusMessage, 62, 1194);
                 }
 
                 this.texture.needsUpdate = true;
@@ -15872,79 +16428,98 @@
             renderMenuContent(ctx) {
                 this.tabRects = [];
 
-                const left = 54;
-                const top = 178;
-                const colGap = 26;
-                const rowGap = 18;
-                const colW = 445;
-                const rowH = 120;
+                // 3-column layout: 12 tabs → 4 rows × 3 cols, comfortable spacing
+                const cols = 3;
+                const left = 36;
+                const top = 168;
+                const colGap = 20;
+                const rowGap = 20;
+                const colW = (1024 - left * 2 - colGap * (cols - 1)) / cols; // ≈298
+                const rowH = 100;
 
                 this.tabRects = [];
                 this.tabs.forEach((tab, i) => {
-                    const col = i % 2;
-                    const row = Math.floor(i / 2);
+                    const col = i % cols;
+                    const row = Math.floor(i / cols);
                     const x = left + col * (colW + colGap);
                     const y = top + row * (rowH + rowGap);
                     const isActive = this.lastOpenedTab === tab.id;
 
-                    ctx.fillStyle = isActive ? 'rgba(14,165,233,0.28)' : 'rgba(255,255,255,0.08)';
-                    this.roundRect(ctx, x, y, colW, rowH, 18, true);
+                    // Card background
+                    ctx.fillStyle = isActive ? 'rgba(14,165,233,0.30)' : 'rgba(255,255,255,0.07)';
+                    this.roundRect(ctx, x, y, colW, rowH, 16, true);
 
-                    ctx.strokeStyle = isActive ? 'rgba(56,189,248,0.95)' : 'rgba(255,255,255,0.12)';
-                    ctx.lineWidth = 2;
-                    this.roundRect(ctx, x, y, colW, rowH, 18, false, true);
+                    // Card border
+                    ctx.strokeStyle = isActive ? 'rgba(56,189,248,0.90)' : 'rgba(255,255,255,0.14)';
+                    ctx.lineWidth = isActive ? 2.5 : 1.5;
+                    this.roundRect(ctx, x, y, colW, rowH, 16, false, true);
 
-                    ctx.fillStyle = '#f8fafc';
-                    ctx.font = "700 34px 'Inter', sans-serif";
-                    ctx.textAlign = 'left';
-                    ctx.fillText(tab.label, x + 24, y + 72);
+                    // Tab label — vertically centered
+                    ctx.fillStyle = isActive ? '#ffffff' : '#e2e8f0';
+                    ctx.font = "700 26px 'Inter', sans-serif";
+                    ctx.textAlign = 'center';
+                    ctx.fillText(tab.label, x + colW / 2, y + rowH / 2 + 9);
 
                     this.tabRects.push({ x, y, w: colW, h: rowH, tabId: tab.id });
                     this.buttons.push({ x, y, w: colW, h: rowH, action: `open:${tab.id}` });
                 });
 
-                ctx.fillStyle = (this.statusMessage || this.lastOpenedTab) ? '#38bdf8' : '#94a3b8';
-                ctx.font = "600 24px 'Inter', sans-serif";
-                ctx.textAlign = 'left';
+                // Divider above footer
+                ctx.strokeStyle = 'rgba(255,255,255,0.10)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(36, 1140);
+                ctx.lineTo(988, 1140);
+                ctx.stroke();
+
+                // Status text in footer
                 const statusText = this.statusMessage || (this.lastOpenedTab
                     ? `Last opened: ${this.tabs.find(t => t.id === this.lastOpenedTab)?.label || ''}`
-                    : 'No tab opened yet');
-                ctx.fillText(statusText, 58, 908);
+                    : 'Point controller ray & press Trigger to open a tab');
+                ctx.fillStyle = this.lastOpenedTab ? '#38bdf8' : '#94a3b8';
+                ctx.font = "500 22px 'Inter', sans-serif";
+                ctx.textAlign = 'left';
+                ctx.fillText(statusText, 40, 1190);
 
-                ctx.fillStyle = 'rgba(255,255,255,0.12)';
-                this.roundRect(ctx, this.closeRect.x, this.closeRect.y, this.closeRect.w, this.closeRect.h, 16, true);
-                ctx.strokeStyle = 'rgba(255,255,255,0.26)';
-                this.roundRect(ctx, this.closeRect.x, this.closeRect.y, this.closeRect.w, this.closeRect.h, 16, false, true);
-                ctx.fillStyle = '#e5e7eb';
-                ctx.font = "700 30px 'Inter', sans-serif";
+                // CLOSE button in footer
+                const cr = this.closeRect;
+                ctx.fillStyle = 'rgba(239,68,68,0.18)';
+                this.roundRect(ctx, cr.x, cr.y, cr.w, cr.h, 16, true);
+                ctx.strokeStyle = 'rgba(239,68,68,0.50)';
+                ctx.lineWidth = 1.5;
+                this.roundRect(ctx, cr.x, cr.y, cr.w, cr.h, 16, false, true);
+                ctx.fillStyle = '#fca5a5';
+                ctx.font = "700 28px 'Inter', sans-serif";
                 ctx.textAlign = 'center';
-                ctx.fillText('CLOSE', this.closeRect.x + this.closeRect.w / 2, this.closeRect.y + 48);
-                this.buttons.push({
-                    x: this.closeRect.x,
-                    y: this.closeRect.y,
-                    w: this.closeRect.w,
-                    h: this.closeRect.h,
-                    action: 'close'
-                });
+                ctx.fillText('CLOSE', cr.x + cr.w / 2, cr.y + cr.h / 2 + 10);
+                this.buttons.push({ x: cr.x, y: cr.y, w: cr.w, h: cr.h, action: 'close' });
             }
 
             renderHeaderActionButtons(ctx) {
-                const back = { x: 36, y: 24, w: 150, h: 70 };
-                const close = { x: 838, y: 24, w: 150, h: 70 };
+                const back  = { x: 36,  y: 28, w: 160, h: 68 };
+                const close = { x: 828, y: 28, w: 160, h: 68 };
 
+                // BACK button
                 ctx.fillStyle = 'rgba(255,255,255,0.14)';
                 this.roundRect(ctx, back.x, back.y, back.w, back.h, 14, true);
-                this.roundRect(ctx, close.x, close.y, close.w, close.h, 14, true);
-
                 ctx.strokeStyle = 'rgba(255,255,255,0.28)';
+                ctx.lineWidth = 1.5;
                 this.roundRect(ctx, back.x, back.y, back.w, back.h, 14, false, true);
-                this.roundRect(ctx, close.x, close.y, close.w, close.h, 14, false, true);
-
                 ctx.fillStyle = '#f8fafc';
-                ctx.font = "700 28px 'Inter', sans-serif";
+                ctx.font = "700 26px 'Inter', sans-serif";
                 ctx.textAlign = 'center';
-                ctx.fillText('BACK', back.x + back.w / 2, back.y + 45);
-                ctx.fillText('CLOSE', close.x + close.w / 2, close.y + 45);
+                ctx.fillText('◀ BACK', back.x + back.w / 2, back.y + 43);
+
+                // CLOSE button
+                ctx.fillStyle = 'rgba(239,68,68,0.20)';
+                this.roundRect(ctx, close.x, close.y, close.w, close.h, 14, true);
+                ctx.strokeStyle = 'rgba(239,68,68,0.50)';
+                ctx.lineWidth = 1.5;
+                this.roundRect(ctx, close.x, close.y, close.w, close.h, 14, false, true);
+                ctx.fillStyle = '#fca5a5';
+                ctx.font = "700 26px 'Inter', sans-serif";
+                ctx.textAlign = 'center';
+                ctx.fillText('CLOSE ✕', close.x + close.w / 2, close.y + 43);
 
                 this.buttons.push({ ...back, action: 'back' });
                 this.buttons.push({ ...close, action: 'close' });
@@ -16045,7 +16620,9 @@
                 ctx.fillStyle = '#e2e8f0';
                 ctx.font = "700 44px 'Inter', sans-serif";
                 ctx.textAlign = 'center';
-                ctx.fillText('Layers & Point Cloud (VR Native)', 512, 170);
+                ctx.fillText('Layers & Point Cloud (VR Native)', 512, 200);
+                ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = 1;
+                ctx.beginPath(); ctx.moveTo(40, 224); ctx.lineTo(984, 224); ctx.stroke();
 
                 const showPointsCb = document.getElementById('showPoints');
                 const sizeSlider = document.getElementById('sizeSlider');
@@ -16060,32 +16637,34 @@
                 ctx.fillStyle = '#93c5fd';
                 ctx.font = "600 26px 'Inter', sans-serif";
                 ctx.textAlign = 'left';
-                ctx.fillText(`Model: ${showPointsCb && showPointsCb.checked ? 'Visible' : 'Hidden'}`, 60, 240);
-                ctx.fillText(`Point Size: ${pointSizeVal.toFixed(3)}`, 60, 274);
-                ctx.fillText(`Amplitude Filter: ${isoVal.toFixed(0)}`, 60, 308);
-                ctx.fillText(`Shape: ${pointShape}`, 60, 342);
-                ctx.fillText(`Sync All Grids: ${syncState ? 'ON' : 'OFF'}`, 60, 376);
+                ctx.fillText(`Model: ${showPointsCb && showPointsCb.checked ? 'Visible' : 'Hidden'}`, 60, 268);
+                ctx.fillText(`Point Size: ${pointSizeVal.toFixed(3)}`, 60, 310);
+                ctx.fillText(`Amplitude Filter: ${isoVal.toFixed(0)}`, 60, 352);
+                ctx.fillText(`Shape: ${pointShape}`, 60, 394);
+                ctx.fillText(`Sync All Grids: ${syncState ? 'ON' : 'OFF'}`, 60, 436);
 
-                this.renderActionButton(ctx, 60, 420, 290, 78, showPointsCb && showPointsCb.checked ? 'Hide Model' : 'Show Model', 'layers.toggleModel', 'rgba(14,165,233,0.35)');
-                this.renderActionButton(ctx, 370, 420, 290, 78, 'All Layers', 'layers.all', 'rgba(34,197,94,0.28)');
-                this.renderActionButton(ctx, 680, 420, 290, 78, 'No Layers', 'layers.none', 'rgba(248,113,113,0.28)');
+                this.renderActionButton(ctx, 60, 474, 290, 76, showPointsCb && showPointsCb.checked ? 'Hide Model' : 'Show Model', 'layers.toggleModel', 'rgba(14,165,233,0.35)');
+                this.renderActionButton(ctx, 370, 474, 290, 76, 'All Layers', 'layers.all', 'rgba(34,197,94,0.28)');
+                this.renderActionButton(ctx, 680, 474, 290, 76, 'No Layers', 'layers.none', 'rgba(248,113,113,0.28)');
 
-                this.renderActionButton(ctx, 60, 522, 290, 78, 'Cycle Layer', 'layers.cycle');
-                this.renderActionButton(ctx, 370, 522, 140, 78, 'Size -', 'layers.sizeDown');
-                this.renderActionButton(ctx, 520, 522, 140, 78, 'Size +', 'layers.sizeUp');
-                this.renderActionButton(ctx, 680, 522, 290, 78, 'Random Palette', 'layers.paletteRandom');
+                this.renderActionButton(ctx, 60, 570, 290, 76, 'Cycle Layer', 'layers.cycle');
+                this.renderActionButton(ctx, 370, 570, 140, 76, 'Size -', 'layers.sizeDown');
+                this.renderActionButton(ctx, 520, 570, 140, 76, 'Size +', 'layers.sizeUp');
+                this.renderActionButton(ctx, 680, 570, 290, 76, 'Random Palette', 'layers.paletteRandom');
 
-                this.renderActionButton(ctx, 60, 624, 290, 78, 'Prev Shape', 'layers.shapePrev');
-                this.renderActionButton(ctx, 370, 624, 290, 78, 'Next Shape', 'layers.shapeNext');
-                this.renderActionButton(ctx, 680, 624, 290, 78, syncState ? 'Sync OFF' : 'Sync ON', 'layers.toggleSync');
+                this.renderActionButton(ctx, 60, 666, 290, 76, 'Prev Shape', 'layers.shapePrev');
+                this.renderActionButton(ctx, 370, 666, 290, 76, 'Next Shape', 'layers.shapeNext');
+                this.renderActionButton(ctx, 680, 666, 290, 76, syncState ? 'Sync OFF' : 'Sync ON', 'layers.toggleSync');
 
-                this.renderActionButton(ctx, 60, 726, 290, 78, 'Amp -5', 'layers.isoDown');
-                this.renderActionButton(ctx, 370, 726, 290, 78, 'Amp +5', 'layers.isoUp');
-                this.renderActionButton(ctx, 680, 726, 290, 78, 'Refresh State', 'layers.refresh');
+                this.renderActionButton(ctx, 60, 762, 290, 76, 'Amp -5', 'layers.isoDown');
+                this.renderActionButton(ctx, 370, 762, 290, 76, 'Amp +5', 'layers.isoUp');
+                this.renderActionButton(ctx, 680, 762, 290, 76, 'Refresh State', 'layers.refresh');
 
-                ctx.fillStyle = '#94a3b8';
-                ctx.font = "500 22px 'Inter', sans-serif";
-                ctx.fillText('These controls directly drive the same desktop layer logic, fully inside VR.', 60, 854);
+                ctx.strokeStyle = 'rgba(255,255,255,0.08)'; ctx.lineWidth = 1;
+                ctx.beginPath(); ctx.moveTo(40, 856); ctx.lineTo(984, 856); ctx.stroke();
+                ctx.fillStyle = '#64748b';
+                ctx.font = "400 20px 'Inter', sans-serif";
+                ctx.fillText('These controls directly drive the same desktop layer logic, fully inside VR.', 60, 888);
             }
 
             renderSlicesContent(ctx) {
@@ -16103,19 +16682,21 @@
                 ctx.fillStyle = '#e2e8f0';
                 ctx.font = "700 44px 'Inter', sans-serif";
                 ctx.textAlign = 'center';
-                ctx.fillText('Depth Slices (VR Native)', 512, 170);
+                ctx.fillText('Depth Slices (VR Native)', 512, 200);
+                ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = 1;
+                ctx.beginPath(); ctx.moveTo(40, 224); ctx.lineTo(984, 224); ctx.stroke();
 
                 ctx.fillStyle = '#93c5fd';
                 ctx.font = "600 26px 'Inter', sans-serif";
                 ctx.textAlign = 'left';
-                ctx.fillText(`3D Slice: ${depth3D && depth3D.checked ? 'ON' : 'OFF'}`, 60, 240);
-                ctx.fillText(`2D Slice: ${depth2D && depth2D.checked ? 'ON' : 'OFF'}`, 60, 274);
-                ctx.fillText(`Depth: ${curDepth.toFixed(1)}m (range ${minDepth.toFixed(1)} - ${maxDepth.toFixed(1)})`, 60, 308);
-                ctx.fillText(`Sync All Grids: ${linkAll && linkAll.checked ? 'ON' : 'OFF'}`, 60, 342);
+                ctx.fillText(`3D Slice: ${depth3D && depth3D.checked ? 'ON' : 'OFF'}`, 60, 264);
+                ctx.fillText(`2D Slice: ${depth2D && depth2D.checked ? 'ON' : 'OFF'}`, 60, 306);
+                ctx.fillText(`Depth: ${curDepth.toFixed(1)}m (range ${minDepth.toFixed(1)} - ${maxDepth.toFixed(1)})`, 60, 348);
+                ctx.fillText(`Sync All Grids: ${linkAll && linkAll.checked ? 'ON' : 'OFF'}`, 60, 390);
 
                 // Virtual depth slider for direct in-VR depth selection.
                 const sliderX = 60;
-                const sliderY = 364;
+                const sliderY = 420;
                 const sliderW = 910;
                 const sliderH = 24;
                 const safeRange = Math.max(0.0001, maxDepth - minDepth);
@@ -16130,25 +16711,27 @@
                 this.roundRect(ctx, sliderX, sliderY, Math.max(12, sliderW * t), sliderH, 12, true);
                 ctx.fillStyle = '#38bdf8';
                 this.roundRect(ctx, thumbX - 14, sliderY - 6, 28, sliderH + 12, 10, true);
-                ctx.fillStyle = '#e2e8f0';
-                ctx.font = "500 20px 'Inter', sans-serif";
-                ctx.fillText('Point and trigger on this bar to set depth directly', 60, 410);
+                ctx.fillStyle = '#64748b';
+                ctx.font = "400 20px 'Inter', sans-serif";
+                ctx.fillText('Point and trigger on this bar to set depth directly', 60, 462);
 
-                this.renderActionButton(ctx, 60, 420, 290, 78, depth3D && depth3D.checked ? 'Disable 3D Slice' : 'Enable 3D Slice', 'slices.toggle3d', 'rgba(14,165,233,0.35)');
-                this.renderActionButton(ctx, 370, 420, 290, 78, depth2D && depth2D.checked ? 'Disable 2D Slice' : 'Enable 2D Slice', 'slices.toggle2d', 'rgba(168,85,247,0.28)');
-                this.renderActionButton(ctx, 680, 420, 290, 78, linkAll && linkAll.checked ? 'Sync OFF' : 'Sync ON', 'slices.toggleSync', 'rgba(34,197,94,0.28)');
+                this.renderActionButton(ctx, 60, 484, 290, 76, depth3D && depth3D.checked ? 'Disable 3D Slice' : 'Enable 3D Slice', 'slices.toggle3d', 'rgba(14,165,233,0.35)');
+                this.renderActionButton(ctx, 370, 484, 290, 76, depth2D && depth2D.checked ? 'Disable 2D Slice' : 'Enable 2D Slice', 'slices.toggle2d', 'rgba(168,85,247,0.28)');
+                this.renderActionButton(ctx, 680, 484, 290, 76, linkAll && linkAll.checked ? 'Sync OFF' : 'Sync ON', 'slices.toggleSync', 'rgba(34,197,94,0.28)');
 
-                this.renderActionButton(ctx, 60, 522, 290, 78, 'Depth -0.1m', 'slices.depthDown');
-                this.renderActionButton(ctx, 370, 522, 290, 78, 'Depth +0.1m', 'slices.depthUp');
-                this.renderActionButton(ctx, 680, 522, 290, 78, 'Apply Depth', 'slices.applyDepth');
+                this.renderActionButton(ctx, 60, 578, 290, 76, 'Depth -0.1m', 'slices.depthDown');
+                this.renderActionButton(ctx, 370, 578, 290, 76, 'Depth +0.1m', 'slices.depthUp');
+                this.renderActionButton(ctx, 680, 578, 290, 76, 'Apply Depth', 'slices.applyDepth');
 
-                this.renderActionButton(ctx, 60, 624, 290, 78, 'Depth Min', 'slices.depthMin');
-                this.renderActionButton(ctx, 370, 624, 290, 78, 'Depth Mid', 'slices.depthMid');
-                this.renderActionButton(ctx, 680, 624, 290, 78, 'Depth Max', 'slices.depthMax');
+                this.renderActionButton(ctx, 60, 672, 290, 76, 'Depth Min', 'slices.depthMin');
+                this.renderActionButton(ctx, 370, 672, 290, 76, 'Depth Mid', 'slices.depthMid');
+                this.renderActionButton(ctx, 680, 672, 290, 76, 'Depth Max', 'slices.depthMax');
 
-                ctx.fillStyle = '#94a3b8';
-                ctx.font = "500 22px 'Inter', sans-serif";
-                ctx.fillText('Uses the same depth slicing functions as desktop mode.', 60, 854);
+                ctx.strokeStyle = 'rgba(255,255,255,0.08)'; ctx.lineWidth = 1;
+                ctx.beginPath(); ctx.moveTo(40, 764); ctx.lineTo(984, 764); ctx.stroke();
+                ctx.fillStyle = '#64748b';
+                ctx.font = "400 20px 'Inter', sans-serif";
+                ctx.fillText('Uses the same depth slicing functions as desktop mode.', 60, 796);
             }
 
             renderMeshContent(ctx) {
@@ -16168,35 +16751,37 @@
                 ctx.fillStyle = '#e2e8f0';
                 ctx.font = "700 44px 'Inter', sans-serif";
                 ctx.textAlign = 'center';
-                ctx.fillText('Mesh & LiDAR (VR Native)', 512, 170);
+                ctx.fillText('Mesh & LiDAR (VR Native)', 512, 200);
+                ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = 1;
+                ctx.beginPath(); ctx.moveTo(40, 224); ctx.lineTo(984, 224); ctx.stroke();
 
                 ctx.fillStyle = '#93c5fd';
                 ctx.font = "600 24px 'Inter', sans-serif";
                 ctx.textAlign = 'left';
-                ctx.fillText(`Active Mode: ${modeVal}`, 60, 236);
-                ctx.fillText(`Show Mesh: ${showMesh && showMesh.checked ? 'ON' : 'OFF'}`, 60, 268);
-                ctx.fillText(`Show PLY Surface: ${showPly && showPly.checked ? 'ON' : 'OFF'}`, 60, 300);
-                ctx.fillText(`Show Potree: ${showPotree && showPotree.checked ? 'ON' : 'OFF'}`, 60, 332);
-                ctx.fillText(`Mesh Opacity: ${opVal.toFixed(2)} | Mesh Y: ${yVal.toFixed(1)}m`, 60, 364);
+                ctx.fillText(`Active Mode: ${modeVal}`, 60, 262);
+                ctx.fillText(`Show Mesh: ${showMesh && showMesh.checked ? 'ON' : 'OFF'}`, 60, 302);
+                ctx.fillText(`Show PLY Surface: ${showPly && showPly.checked ? 'ON' : 'OFF'}`, 60, 342);
+                ctx.fillText(`Show Potree: ${showPotree && showPotree.checked ? 'ON' : 'OFF'}`, 60, 382);
+                ctx.fillText(`Mesh Opacity: ${opVal.toFixed(2)} | Mesh Y: ${yVal.toFixed(1)}m`, 60, 422);
 
-                this.renderActionButton(ctx, 60, 420, 290, 78, 'Mode: Cloud', 'mesh.mode.cloud', 'rgba(16,185,129,0.28)');
-                this.renderActionButton(ctx, 370, 420, 290, 78, 'Mode: PLY', 'mesh.mode.ply', 'rgba(14,165,233,0.28)');
-                this.renderActionButton(ctx, 680, 420, 290, 78, 'Mode: Potree', 'mesh.mode.potree', 'rgba(168,85,247,0.28)');
+                this.renderActionButton(ctx, 60, 458, 290, 76, 'Mode: Cloud', 'mesh.mode.cloud', 'rgba(16,185,129,0.28)');
+                this.renderActionButton(ctx, 370, 458, 290, 76, 'Mode: PLY', 'mesh.mode.ply', 'rgba(14,165,233,0.28)');
+                this.renderActionButton(ctx, 680, 458, 290, 76, 'Mode: Potree', 'mesh.mode.potree', 'rgba(168,85,247,0.28)');
 
-                this.renderActionButton(ctx, 60, 522, 290, 78, 'Load Cloud Mesh', 'mesh.loadCloud');
-                this.renderActionButton(ctx, 370, 522, 290, 78, 'Load PLY Surface', 'mesh.loadPly');
-                this.renderActionButton(ctx, 680, 522, 290, 78, 'Load Potree', 'mesh.loadPotree');
+                this.renderActionButton(ctx, 60, 554, 290, 76, 'Load Cloud Mesh', 'mesh.loadCloud');
+                this.renderActionButton(ctx, 370, 554, 290, 76, 'Load PLY Surface', 'mesh.loadPly');
+                this.renderActionButton(ctx, 680, 554, 290, 76, 'Load Potree', 'mesh.loadPotree');
 
-                this.renderActionButton(ctx, 60, 624, 290, 78, showMesh && showMesh.checked ? 'Hide Mesh' : 'Show Mesh', 'mesh.toggleShowMesh');
-                this.renderActionButton(ctx, 370, 624, 290, 78, showPly && showPly.checked ? 'Hide PLY' : 'Show PLY', 'mesh.toggleShowPly');
-                this.renderActionButton(ctx, 680, 624, 290, 78, showPotree && showPotree.checked ? 'Hide Potree' : 'Show Potree', 'mesh.toggleShowPotree');
+                this.renderActionButton(ctx, 60, 650, 290, 76, showMesh && showMesh.checked ? 'Hide Mesh' : 'Show Mesh', 'mesh.toggleShowMesh');
+                this.renderActionButton(ctx, 370, 650, 290, 76, showPly && showPly.checked ? 'Hide PLY' : 'Show PLY', 'mesh.toggleShowPly');
+                this.renderActionButton(ctx, 680, 650, 290, 76, showPotree && showPotree.checked ? 'Hide Potree' : 'Show Potree', 'mesh.toggleShowPotree');
 
-                this.renderActionButton(ctx, 60, 726, 220, 78, 'Opacity -', 'mesh.opacityDown');
-                this.renderActionButton(ctx, 290, 726, 220, 78, 'Opacity +', 'mesh.opacityUp');
-                this.renderActionButton(ctx, 520, 726, 220, 78, 'Mesh Y -', 'mesh.posYDown');
-                this.renderActionButton(ctx, 750, 726, 220, 78, 'Mesh Y +', 'mesh.posYUp');
+                this.renderActionButton(ctx, 60, 746, 220, 76, 'Opacity -', 'mesh.opacityDown');
+                this.renderActionButton(ctx, 290, 746, 220, 76, 'Opacity +', 'mesh.opacityUp');
+                this.renderActionButton(ctx, 520, 746, 220, 76, 'Mesh Y -', 'mesh.posYDown');
+                this.renderActionButton(ctx, 750, 746, 220, 76, 'Mesh Y +', 'mesh.posYUp');
 
-                this.renderActionButton(ctx, 370, 822, 290, 72, 'Auto-Fit Mesh to Map', 'mesh.autoFit', 'rgba(245,158,11,0.25)');
+                this.renderActionButton(ctx, 370, 842, 290, 70, 'Auto-Fit Mesh to Map', 'mesh.autoFit', 'rgba(245,158,11,0.25)');
             }
 
             renderGeoContent(ctx) {
@@ -16213,31 +16798,33 @@
                 ctx.fillStyle = '#e2e8f0';
                 ctx.font = "700 44px 'Inter', sans-serif";
                 ctx.textAlign = 'center';
-                ctx.fillText('Geo-Reference & Alignment (VR Native)', 512, 170);
+                ctx.fillText('Geo-Reference & Alignment (VR Native)', 512, 200);
+                ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = 1;
+                ctx.beginPath(); ctx.moveTo(40, 224); ctx.lineTo(984, 224); ctx.stroke();
 
                 ctx.fillStyle = '#93c5fd';
                 ctx.font = "600 24px 'Inter', sans-serif";
                 ctx.textAlign = 'left';
-                ctx.fillText(`KML Boundary: ${showKml && showKml.checked ? 'ON' : 'OFF'}`, 60, 236);
-                ctx.fillText(`Map Type: ${mapType ? mapType.value : 'n/a'} | Zoom: ${mapZoom ? mapZoom.value : 'n/a'}`, 60, 268);
-                ctx.fillText(`Anchor: ${lat ? lat.value : '--'}, ${lon ? lon.value : '--'}, Alt ${alt ? alt.value : '--'}m`, 60, 300);
-                ctx.fillText(`Ground Opacity: ${gOpacity ? parseFloat(gOpacity.value || '1').toFixed(1) : '1.0'}`, 60, 332);
+                ctx.fillText(`KML Boundary: ${showKml && showKml.checked ? 'ON' : 'OFF'}`, 60, 264);
+                ctx.fillText(`Map Type: ${mapType ? mapType.value : 'n/a'} | Zoom: ${mapZoom ? mapZoom.value : 'n/a'}`, 60, 306);
+                ctx.fillText(`Anchor: ${lat ? lat.value : '--'}, ${lon ? lon.value : '--'}, Alt ${alt ? alt.value : '--'}m`, 60, 348);
+                ctx.fillText(`Ground Opacity: ${gOpacity ? parseFloat(gOpacity.value || '1').toFixed(1) : '1.0'}`, 60, 390);
 
-                this.renderActionButton(ctx, 60, 420, 290, 78, showKml && showKml.checked ? 'Hide KML' : 'Show KML', 'geo.toggleKml', 'rgba(250,204,21,0.28)');
-                this.renderActionButton(ctx, 370, 420, 290, 78, 'Start Drawing', 'geo.startAlign', 'rgba(16,185,129,0.28)');
-                this.renderActionButton(ctx, 680, 420, 290, 78, 'Finish & Fit', 'geo.finishAlign', 'rgba(59,130,246,0.28)');
+                this.renderActionButton(ctx, 60, 440, 290, 76, showKml && showKml.checked ? 'Hide KML' : 'Show KML', 'geo.toggleKml', 'rgba(250,204,21,0.28)');
+                this.renderActionButton(ctx, 370, 440, 290, 76, 'Start Drawing', 'geo.startAlign', 'rgba(16,185,129,0.28)');
+                this.renderActionButton(ctx, 680, 440, 290, 76, 'Finish & Fit', 'geo.finishAlign', 'rgba(59,130,246,0.28)');
 
-                this.renderActionButton(ctx, 60, 522, 290, 78, 'Clear Points', 'geo.clearAlign');
-                this.renderActionButton(ctx, 370, 522, 290, 78, 'Set Anchor', 'geo.setAnchor');
-                this.renderActionButton(ctx, 680, 522, 290, 78, 'Copy Coords', 'geo.copyCoords');
+                this.renderActionButton(ctx, 60, 536, 290, 76, 'Clear Points', 'geo.clearAlign');
+                this.renderActionButton(ctx, 370, 536, 290, 76, 'Set Anchor', 'geo.setAnchor');
+                this.renderActionButton(ctx, 680, 536, 290, 76, 'Copy Coords', 'geo.copyCoords');
 
-                this.renderActionButton(ctx, 60, 624, 290, 78, 'Map Type Next', 'geo.mapTypeNext');
-                this.renderActionButton(ctx, 370, 624, 290, 78, 'Zoom Next', 'geo.zoomNext');
-                this.renderActionButton(ctx, 680, 624, 290, 78, 'Open Cesium', 'geo.openCesium', 'rgba(37,99,235,0.28)');
+                this.renderActionButton(ctx, 60, 632, 290, 76, 'Map Type Next', 'geo.mapTypeNext');
+                this.renderActionButton(ctx, 370, 632, 290, 76, 'Zoom Next', 'geo.zoomNext');
+                this.renderActionButton(ctx, 680, 632, 290, 76, 'Open Cesium', 'geo.openCesium', 'rgba(37,99,235,0.28)');
 
-                this.renderActionButton(ctx, 60, 726, 290, 78, 'Ground Opacity -', 'geo.groundOpacityDown');
-                this.renderActionButton(ctx, 370, 726, 290, 78, 'Ground Opacity +', 'geo.groundOpacityUp');
-                this.renderActionButton(ctx, 680, 726, 290, 78, 'Multi-Grid View', 'geo.multiGrid');
+                this.renderActionButton(ctx, 60, 728, 290, 76, 'Ground Opacity -', 'geo.groundOpacityDown');
+                this.renderActionButton(ctx, 370, 728, 290, 76, 'Ground Opacity +', 'geo.groundOpacityUp');
+                this.renderActionButton(ctx, 680, 728, 290, 76, 'Multi-Grid View', 'geo.multiGrid');
             }
 
             renderSurveyContent(ctx) {
@@ -16253,32 +16840,34 @@
                 ctx.fillStyle = '#e2e8f0';
                 ctx.font = "700 44px 'Inter', sans-serif";
                 ctx.textAlign = 'center';
-                ctx.fillText('Survey Plan & Coverage (VR Native)', 512, 170);
+                ctx.fillText('Survey Plan & Coverage (VR Native)', 512, 200);
+                ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = 1;
+                ctx.beginPath(); ctx.moveTo(40, 224); ctx.lineTo(984, 224); ctx.stroke();
 
                 ctx.fillStyle = '#93c5fd';
                 ctx.font = "600 24px 'Inter', sans-serif";
                 ctx.textAlign = 'left';
-                ctx.fillText(`Grid Spacing: ${spacing ? spacing.value : '--'} m`, 60, 236);
-                ctx.fillText(`Generated Grid Visible: ${showGen && showGen.checked ? 'ON' : 'OFF'}`, 60, 268);
-                ctx.fillText(`Status: ${status ? status.textContent : 'Ready'}`, 60, 300);
-                ctx.fillText(`Insights: Area ${insightArea ? insightArea.textContent : '--'} | Lines ${insightLines ? insightLines.textContent : '--'}`, 60, 332);
-                ctx.fillText(`Weather: ${weather ? weather.textContent : 'Unknown'}`, 60, 364);
+                ctx.fillText(`Grid Spacing: ${spacing ? spacing.value : '--'} m`, 60, 262);
+                ctx.fillText(`Generated Grid Visible: ${showGen && showGen.checked ? 'ON' : 'OFF'}`, 60, 302);
+                ctx.fillText(`Status: ${status ? status.textContent : 'Ready'}`, 60, 342);
+                ctx.fillText(`Insights: Area ${insightArea ? insightArea.textContent : '--'} | Lines ${insightLines ? insightLines.textContent : '--'}`, 60, 382);
+                ctx.fillText(`Weather: ${weather ? weather.textContent : 'Unknown'}`, 60, 422);
 
-                this.renderActionButton(ctx, 60, 420, 290, 78, 'Draw Polygon', 'survey.drawPoly', 'rgba(16,185,129,0.28)');
-                this.renderActionButton(ctx, 370, 420, 290, 78, 'Generate Grid', 'survey.generateGrid', 'rgba(59,130,246,0.28)');
-                this.renderActionButton(ctx, 680, 420, 290, 78, 'Clear Grid', 'survey.clearGrid', 'rgba(239,68,68,0.28)');
+                this.renderActionButton(ctx, 60, 460, 290, 76, 'Draw Polygon', 'survey.drawPoly', 'rgba(16,185,129,0.28)');
+                this.renderActionButton(ctx, 370, 460, 290, 76, 'Generate Grid', 'survey.generateGrid', 'rgba(59,130,246,0.28)');
+                this.renderActionButton(ctx, 680, 460, 290, 76, 'Clear Grid', 'survey.clearGrid', 'rgba(239,68,68,0.28)');
 
-                this.renderActionButton(ctx, 60, 522, 290, 78, 'Spacing -0.1', 'survey.spacingDown');
-                this.renderActionButton(ctx, 370, 522, 290, 78, 'Spacing +0.1', 'survey.spacingUp');
-                this.renderActionButton(ctx, 680, 522, 290, 78, showGen && showGen.checked ? 'Hide Grid' : 'Show Grid', 'survey.toggleGenerated');
+                this.renderActionButton(ctx, 60, 556, 290, 76, 'Spacing -0.1', 'survey.spacingDown');
+                this.renderActionButton(ctx, 370, 556, 290, 76, 'Spacing +0.1', 'survey.spacingUp');
+                this.renderActionButton(ctx, 680, 556, 290, 76, showGen && showGen.checked ? 'Hide Grid' : 'Show Grid', 'survey.toggleGenerated');
 
-                this.renderActionButton(ctx, 60, 624, 290, 78, 'Refresh Weather', 'survey.refreshWeather');
-                this.renderActionButton(ctx, 370, 624, 290, 78, 'Export KML', 'survey.exportKML');
-                this.renderActionButton(ctx, 680, 624, 290, 78, 'Export SHP', 'survey.exportSHP');
+                this.renderActionButton(ctx, 60, 652, 290, 76, 'Refresh Weather', 'survey.refreshWeather');
+                this.renderActionButton(ctx, 370, 652, 290, 76, 'Export KML', 'survey.exportKML');
+                this.renderActionButton(ctx, 680, 652, 290, 76, 'Export SHP', 'survey.exportSHP');
 
-                this.renderActionButton(ctx, 60, 726, 290, 78, isDrawingSurvey ? 'Finish Polygon' : 'Start Drawing', 'survey.finishPoly', 'rgba(34,197,94,0.28)');
-                this.renderActionButton(ctx, 370, 726, 290, 78, 'Survey Report', 'survey.report');
-                this.renderActionButton(ctx, 680, 726, 290, 78, 'Print Plan', 'survey.print');
+                this.renderActionButton(ctx, 60, 748, 290, 76, isDrawingSurvey ? 'Finish Polygon' : 'Start Drawing', 'survey.finishPoly', 'rgba(34,197,94,0.28)');
+                this.renderActionButton(ctx, 370, 748, 290, 76, 'Survey Report', 'survey.report');
+                this.renderActionButton(ctx, 680, 748, 290, 76, 'Print Plan', 'survey.print');
             }
 
             renderLassoContent(ctx) {
@@ -16295,38 +16884,52 @@
                 ctx.fillStyle = '#e2e8f0';
                 ctx.font = "700 44px 'Inter', sans-serif";
                 ctx.textAlign = 'center';
-                ctx.fillText('Lasso Remove (VR Native)', 512, 170);
+                ctx.fillText('Lasso Remove (VR Native)', 512, 200);
+                ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = 1;
+                ctx.beginPath(); ctx.moveTo(40, 224); ctx.lineTo(984, 224); ctx.stroke();
 
                 ctx.fillStyle = '#93c5fd';
                 ctx.font = "600 22px 'Inter', sans-serif";
                 ctx.textAlign = 'left';
-                ctx.fillText(`Selection Mode: ${modeLabel}`, 60, 236);
-                ctx.fillText(`Path Width: ${pathWidthVal.toFixed(0)} px`, 60, 268);
-                ctx.fillText(`Lasso Status: ${lassoStatus ? lassoStatus.textContent : 'inactive'}`, 60, 300);
-                ctx.fillText(`Branch Regions: ${branchStatus ? branchStatus.textContent : '0'}`, 60, 332);
+                ctx.fillText(`Selection Mode: ${modeLabel}`, 60, 264);
+                ctx.fillText(`Path Width: ${pathWidthVal.toFixed(0)} px`, 60, 306);
+                ctx.fillText(`Lasso Status: ${lassoStatus ? lassoStatus.textContent : 'inactive'}`, 60, 348);
+                ctx.fillText(`Branch Regions: ${branchStatus ? branchStatus.textContent : '0'}`, 60, 390);
 
-                this.renderActionButton(ctx, 60, 420, 290, 78, 'Start Lasso', 'lasso.start', 'rgba(14,165,233,0.35)');
-                this.renderActionButton(ctx, 370, 420, 290, 78, 'Undo Point', 'lasso.undoPoint', 'rgba(245,158,11,0.28)');
-                this.renderActionButton(ctx, 680, 420, 290, 78, 'Finish Lasso', 'lasso.finish', 'rgba(34,197,94,0.28)');
+                this.renderActionButton(ctx, 60, 436, 290, 76, 'Start Lasso', 'lasso.start', 'rgba(14,165,233,0.35)');
+                this.renderActionButton(ctx, 370, 436, 290, 76, 'Undo Point', 'lasso.undoPoint', 'rgba(245,158,11,0.28)');
+                this.renderActionButton(ctx, 680, 436, 290, 76, 'Finish Lasso', 'lasso.finish', 'rgba(34,197,94,0.28)');
 
-                this.renderActionButton(ctx, 60, 522, 290, 78, 'Remove Lasso Area', 'lasso.removeArea', 'rgba(34,197,94,0.28)');
-                this.renderActionButton(ctx, 370, 522, 290, 78, 'Undo Last Remove', 'lasso.undoRemove', 'rgba(245,158,11,0.28)');
-                this.renderActionButton(ctx, 680, 522, 290, 78, 'Clear Lasso', 'lasso.clear', 'rgba(239,68,68,0.28)');
+                this.renderActionButton(ctx, 60, 532, 290, 76, 'Remove Lasso Area', 'lasso.removeArea', 'rgba(34,197,94,0.28)');
+                this.renderActionButton(ctx, 370, 532, 290, 76, 'Undo Last Remove', 'lasso.undoRemove', 'rgba(245,158,11,0.28)');
+                this.renderActionButton(ctx, 680, 532, 290, 76, 'Clear Lasso', 'lasso.clear', 'rgba(239,68,68,0.28)');
 
-                this.renderActionButton(ctx, 60, 624, 290, 78, 'Add Branch Region', 'lasso.addBranch', 'rgba(20,184,166,0.30)');
-                this.renderActionButton(ctx, 370, 624, 290, 78, 'Clear Branch Regions', 'lasso.clearBranch', 'rgba(239,68,68,0.24)');
-                this.renderActionButton(ctx, 680, 624, 290, 78, 'Mode Next', 'lasso.modeNext');
+                this.renderActionButton(ctx, 60, 628, 290, 76, 'Add Branch Region', 'lasso.addBranch', 'rgba(20,184,166,0.30)');
+                this.renderActionButton(ctx, 370, 628, 290, 76, 'Clear Branch Regions', 'lasso.clearBranch', 'rgba(239,68,68,0.24)');
+                this.renderActionButton(ctx, 680, 628, 290, 76, 'Mode Next', 'lasso.modeNext');
 
-                this.renderActionButton(ctx, 60, 726, 290, 78, 'Path Width -', 'lasso.pathWidthDown');
-                this.renderActionButton(ctx, 370, 726, 290, 78, 'Path Width +', 'lasso.pathWidthUp');
-                this.renderActionButton(ctx, 680, 726, 290, 78, 'Refresh', 'lasso.refresh');
+                this.renderActionButton(ctx, 60, 724, 290, 76, 'Path Width -', 'lasso.pathWidthDown');
+                this.renderActionButton(ctx, 370, 724, 290, 76, 'Path Width +', 'lasso.pathWidthUp');
+                this.renderActionButton(ctx, 680, 724, 290, 76, 'Refresh', 'lasso.refresh');
 
-                this.renderActionButton(ctx, 60, 828, 445, 72, 'Export CSV', 'lasso.exportCSV', 'rgba(99,102,241,0.28)');
-                this.renderActionButton(ctx, 525, 828, 445, 72, 'Export PLY', 'lasso.exportPLY', 'rgba(139,92,246,0.28)');
+                this.renderActionButton(ctx, 60, 820, 445, 70, 'Export CSV', 'lasso.exportCSV', 'rgba(99,102,241,0.28)');
+                this.renderActionButton(ctx, 525, 820, 445, 70, 'Export PLY', 'lasso.exportPLY', 'rgba(139,92,246,0.28)');
             }
 
             renderSolidsContent(ctx) {
                 this.renderHeaderActionButtons(ctx);
+
+                const pageCount = this.tabPageCounts && this.tabPageCounts.solids ? this.tabPageCounts.solids : 2;
+                const currentPage = this.tabPages && typeof this.tabPages.solids === 'number' ? this.tabPages.solids : 0;
+                const page = Math.max(0, Math.min(pageCount - 1, currentPage));
+                if (this.tabPages) this.tabPages.solids = page;
+
+                this.renderActionButton(ctx, 60, 152, 120, 44, 'Prev', 'page.solids.prev');
+                this.renderActionButton(ctx, 200, 152, 120, 44, 'Next', 'page.solids.next');
+                ctx.fillStyle = '#93c5fd';
+                ctx.font = "600 22px 'Inter', sans-serif";
+                ctx.textAlign = 'center';
+                ctx.fillText(`Page ${page + 1}/${pageCount}`, 512, 182);
 
                 const typeSel = document.getElementById('solidReconstructType');
                 const radiusScale = document.getElementById('solidRadiusScale');
@@ -16347,56 +16950,90 @@
                 const branchCount = branchSelect ? Math.max(0, branchSelect.options.length - 1) : 0;
                 const savedCount = savedSelect ? Math.max(0, savedSelect.options.length - 1) : 0;
 
-                ctx.fillStyle = '#e2e8f0';
-                ctx.font = "700 44px 'Inter', sans-serif";
-                ctx.textAlign = 'center';
-                ctx.fillText('Solid Build (VR Native)', 512, 170);
+                if (page === 0) {
+                    ctx.fillStyle = '#e2e8f0';
+                    ctx.font = "700 44px 'Inter', sans-serif";
+                    ctx.textAlign = 'center';
+                    ctx.fillText('Solid Build (VR Native)', 512, 220);
 
-                ctx.fillStyle = '#93c5fd';
-                ctx.font = "600 20px 'Inter', sans-serif";
-                ctx.textAlign = 'left';
-                ctx.fillText(`Type: ${typeLabel} | Radius: ${radiusVal.toFixed(2)} | Smoothness: ${smoothVal.toFixed(0)}`, 60, 236);
-                ctx.fillText(`Branch Mode: ${branchMode} | Path Width: ${branchPathVal.toFixed(0)} px`, 60, 264);
-                ctx.fillText(`Branch Solids: ${branchCount} | Saved Solids: ${savedCount} | Show Loaded: ${showLoaded && showLoaded.checked ? 'ON' : 'OFF'}`, 60, 292);
-                ctx.fillText(`Status: ${statusEl ? statusEl.textContent : 'inactive'}`, 60, 320);
-                ctx.fillText(`${savedStatusEl ? savedStatusEl.textContent : 'Saved branch solids: not loaded'}`, 60, 348);
+                    ctx.fillStyle = '#93c5fd';
+                    ctx.font = "600 20px 'Inter', sans-serif";
+                    ctx.textAlign = 'left';
+                    ctx.fillText(`Type: ${typeLabel} | Radius: ${radiusVal.toFixed(2)} | Smoothness: ${smoothVal.toFixed(0)}`, 60, 236);
+                    ctx.fillText(`Branch Mode: ${branchMode} | Path Width: ${branchPathVal.toFixed(0)} px`, 60, 264);
+                    ctx.fillText(`Branch Solids: ${branchCount} | Saved Solids: ${savedCount} | Show Loaded: ${showLoaded && showLoaded.checked ? 'ON' : 'OFF'}`, 60, 292);
+                    ctx.fillText(`Status: ${statusEl ? statusEl.textContent : 'inactive'}`, 60, 320);
+                    ctx.fillText(`${savedStatusEl ? savedStatusEl.textContent : 'Saved branch solids: not loaded'}`, 60, 348);
 
-                this.renderActionButton(ctx, 60, 392, 290, 68, 'Build Solid', 'solids.buildSolid', 'rgba(249,115,22,0.30)');
-                this.renderActionButton(ctx, 370, 392, 290, 68, 'Build Branch Solids', 'solids.buildBranches', 'rgba(251,113,133,0.30)');
-                this.renderActionButton(ctx, 680, 392, 290, 68, 'Undo Solid', 'solids.undoSolid', 'rgba(239,68,68,0.24)');
+                    this.renderActionButton(ctx, 60, 392, 290, 68, 'Build Solid', 'solids.buildSolid', 'rgba(249,115,22,0.30)');
+                    this.renderActionButton(ctx, 370, 392, 290, 68, 'Build Branch Solids', 'solids.buildBranches', 'rgba(251,113,133,0.30)');
+                    this.renderActionButton(ctx, 680, 392, 290, 68, 'Undo Solid', 'solids.undoSolid', 'rgba(239,68,68,0.24)');
 
-                this.renderActionButton(ctx, 60, 472, 220, 62, 'Type Prev', 'solids.typePrev');
-                this.renderActionButton(ctx, 290, 472, 220, 62, 'Type Next', 'solids.typeNext');
-                this.renderActionButton(ctx, 520, 472, 220, 62, 'Radius -', 'solids.radiusDown');
-                this.renderActionButton(ctx, 750, 472, 220, 62, 'Radius +', 'solids.radiusUp');
+                    this.renderActionButton(ctx, 60, 472, 220, 62, 'Type Prev', 'solids.typePrev');
+                    this.renderActionButton(ctx, 290, 472, 220, 62, 'Type Next', 'solids.typeNext');
+                    this.renderActionButton(ctx, 520, 472, 220, 62, 'Radius -', 'solids.radiusDown');
+                    this.renderActionButton(ctx, 750, 472, 220, 62, 'Radius +', 'solids.radiusUp');
 
-                this.renderActionButton(ctx, 60, 548, 220, 62, 'Smooth -', 'solids.smoothDown');
-                this.renderActionButton(ctx, 290, 548, 220, 62, 'Smooth +', 'solids.smoothUp');
-                this.renderActionButton(ctx, 520, 548, 220, 62, 'Branch Mode Next', 'solids.branchModeNext');
-                this.renderActionButton(ctx, 750, 548, 220, 62, 'Path Width +/-', 'solids.branchPathWidthStep');
+                    this.renderActionButton(ctx, 60, 548, 220, 62, 'Smooth -', 'solids.smoothDown');
+                    this.renderActionButton(ctx, 290, 548, 220, 62, 'Smooth +', 'solids.smoothUp');
+                    this.renderActionButton(ctx, 520, 548, 220, 62, 'Branch Mode Next', 'solids.branchModeNext');
+                    this.renderActionButton(ctx, 750, 548, 220, 62, 'Path Width +/-', 'solids.branchPathWidthStep');
 
-                this.renderActionButton(ctx, 60, 624, 220, 62, 'Start Branch Draw', 'solids.branchStart', 'rgba(14,165,233,0.28)');
-                this.renderActionButton(ctx, 290, 624, 220, 62, 'Undo Point', 'solids.branchUndo', 'rgba(245,158,11,0.28)');
-                this.renderActionButton(ctx, 520, 624, 220, 62, 'Finish Draw', 'solids.branchFinish', 'rgba(34,197,94,0.28)');
-                this.renderActionButton(ctx, 750, 624, 220, 62, 'Clear Draw', 'solids.branchClear', 'rgba(239,68,68,0.24)');
+                    this.renderActionButton(ctx, 60, 624, 220, 62, 'Start Branch Draw', 'solids.branchStart', 'rgba(14,165,233,0.28)');
+                    this.renderActionButton(ctx, 290, 624, 220, 62, 'Undo Point', 'solids.branchUndo', 'rgba(245,158,11,0.28)');
+                    this.renderActionButton(ctx, 520, 624, 220, 62, 'Finish Draw', 'solids.branchFinish', 'rgba(34,197,94,0.28)');
+                    this.renderActionButton(ctx, 750, 624, 220, 62, 'Clear Draw', 'solids.branchClear', 'rgba(239,68,68,0.24)');
 
-                this.renderActionButton(ctx, 60, 700, 290, 62, 'Add Branch Region', 'solids.addBranchRegion', 'rgba(20,184,166,0.28)');
-                this.renderActionButton(ctx, 370, 700, 290, 62, 'Select Branch Prev', 'solids.selectBranchPrev');
-                this.renderActionButton(ctx, 680, 700, 290, 62, 'Select Branch Next', 'solids.selectBranchNext');
+                    this.renderActionButton(ctx, 60, 700, 290, 62, 'Add Branch Region', 'solids.addBranchRegion', 'rgba(20,184,166,0.28)');
+                    this.renderActionButton(ctx, 370, 700, 290, 62, 'Select Branch Prev', 'solids.selectBranchPrev');
+                    this.renderActionButton(ctx, 680, 700, 290, 62, 'Select Branch Next', 'solids.selectBranchNext');
 
-                this.renderActionButton(ctx, 60, 776, 220, 62, 'Move X +', 'solids.moveXPlus');
-                this.renderActionButton(ctx, 290, 776, 220, 62, 'Move Y +', 'solids.moveYPlus');
-                this.renderActionButton(ctx, 520, 776, 220, 62, 'Move Z +', 'solids.moveZPlus');
-                this.renderActionButton(ctx, 750, 776, 220, 62, 'Apply Move', 'solids.applyMove', 'rgba(14,165,233,0.28)');
+                    this.renderActionButton(ctx, 60, 776, 220, 62, 'Move X +', 'solids.moveXPlus');
+                    this.renderActionButton(ctx, 290, 776, 220, 62, 'Move Y +', 'solids.moveYPlus');
+                    this.renderActionButton(ctx, 520, 776, 220, 62, 'Move Z +', 'solids.moveZPlus');
+                    this.renderActionButton(ctx, 750, 776, 220, 62, 'Apply Move', 'solids.applyMove', 'rgba(14,165,233,0.28)');
 
-                this.renderActionButton(ctx, 60, 852, 290, 62, 'Combine + Save', 'solids.combineSave', 'rgba(34,197,94,0.28)');
-                this.renderActionButton(ctx, 370, 852, 290, 62, 'Refresh Saved', 'solids.refreshSaved');
-                this.renderActionButton(ctx, 680, 852, 290, 62, 'Show Loaded Toggle', 'solids.toggleShowLoaded');
+                    this.renderActionButton(ctx, 60, 852, 290, 62, 'Combine + Save', 'solids.combineSave', 'rgba(34,197,94,0.28)');
+                    this.renderActionButton(ctx, 370, 852, 290, 62, 'Refresh Saved', 'solids.refreshSaved');
+                    this.renderActionButton(ctx, 680, 852, 290, 62, 'Show Loaded Toggle', 'solids.toggleShowLoaded');
 
-                this.renderActionButton(ctx, 60, 928, 220, 62, 'Saved Prev', 'solids.savedPrev');
-                this.renderActionButton(ctx, 290, 928, 220, 62, 'Saved Next', 'solids.savedNext');
-                this.renderActionButton(ctx, 520, 928, 220, 62, 'Load Saved', 'solids.loadSaved', 'rgba(20,184,166,0.28)');
-                this.renderActionButton(ctx, 750, 928, 220, 62, 'Delete Saved', 'solids.deleteSaved', 'rgba(239,68,68,0.28)');
+                    this.renderActionButton(ctx, 60, 928, 220, 62, 'Saved Prev', 'solids.savedPrev');
+                    this.renderActionButton(ctx, 290, 928, 220, 62, 'Saved Next', 'solids.savedNext');
+                    this.renderActionButton(ctx, 520, 928, 220, 62, 'Load Saved', 'solids.loadSaved', 'rgba(20,184,166,0.28)');
+                    this.renderActionButton(ctx, 750, 928, 220, 62, 'Delete Saved', 'solids.deleteSaved', 'rgba(239,68,68,0.28)');
+                } else {
+                    const boundaryDepth = document.getElementById('boundaryDepthSlider');
+                    const depthVal = boundaryDepth ? parseFloat(boundaryDepth.value || '1') : 1;
+                    const boundaryMeshes = window.solidReconstructState && Array.isArray(window.solidReconstructState.meshes)
+                        ? window.solidReconstructState.meshes.filter(m => m && m.userData && m.userData.type === '3d_boundary')
+                        : [];
+                    const boundaryCount = boundaryMeshes.length;
+
+                    ctx.fillStyle = '#e2e8f0';
+                    ctx.font = "700 44px 'Inter', sans-serif";
+                    ctx.textAlign = 'center';
+                    ctx.fillText('3D Boundaries (VR Native)', 512, 220);
+
+                    ctx.fillStyle = '#93c5fd';
+                    ctx.font = "600 22px 'Inter', sans-serif";
+                    ctx.textAlign = 'left';
+                    ctx.fillText(`Boundaries: ${boundaryCount} | Depth: ${depthVal.toFixed(1)} m`, 60, 236);
+
+                    this.renderActionButton(ctx, 60, 280, 290, 72, 'Create Boundary', 'boundaries.create', 'rgba(6,182,212,0.28)');
+                    this.renderActionButton(ctx, 370, 280, 290, 72, 'Select Area', 'boundaries.selectArea', 'rgba(16,185,129,0.28)');
+                    this.renderActionButton(ctx, 680, 280, 290, 72, 'Toggle Boundaries', 'boundaries.toggleShow', 'rgba(99,102,241,0.24)');
+
+                    this.renderActionButton(ctx, 60, 368, 290, 72, 'Export JSON', 'boundaries.exportJSON', 'rgba(139,92,246,0.28)');
+                    this.renderActionButton(ctx, 370, 368, 290, 72, 'Import JSON', 'boundaries.importJSON', 'rgba(59,130,246,0.28)');
+                    this.renderActionButton(ctx, 680, 368, 290, 72, 'Export KML', 'boundaries.exportKML', 'rgba(14,165,233,0.28)');
+
+                    this.renderActionButton(ctx, 60, 456, 290, 72, 'Import KML', 'boundaries.importKML', 'rgba(56,189,248,0.28)');
+                    this.renderActionButton(ctx, 370, 456, 290, 72, 'Save Set', 'boundaries.saveSet', 'rgba(139,92,246,0.28)');
+                    this.renderActionButton(ctx, 680, 456, 290, 72, 'Load Set', 'boundaries.loadSet', 'rgba(16,185,129,0.28)');
+
+                    this.renderActionButton(ctx, 60, 544, 290, 72, 'Delete Set', 'boundaries.deleteSet', 'rgba(239,68,68,0.28)');
+                }
+
             }
 
             renderCollabContent(ctx) {
@@ -16409,31 +17046,35 @@
                 ctx.fillStyle = '#e2e8f0';
                 ctx.font = "700 44px 'Inter', sans-serif";
                 ctx.textAlign = 'center';
-                ctx.fillText('Collaboration (VR Native)', 512, 170);
+                ctx.fillText('Collaboration (VR Native)', 512, 200);
+                ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = 1;
+                ctx.beginPath(); ctx.moveTo(40, 224); ctx.lineTo(984, 224); ctx.stroke();
 
                 ctx.fillStyle = '#93c5fd';
                 ctx.font = "600 24px 'Inter', sans-serif";
                 ctx.textAlign = 'left';
-                ctx.fillText(`Session: ${sessionId}`, 60, 236);
-                ctx.fillText(`Participants: ${participantCount}`, 60, 268);
-                ctx.fillText(`Voice Call: ${isInCall ? 'ACTIVE' : 'INACTIVE'}`, 60, 300);
-                ctx.fillText(`Status: ${currentSessionId ? 'Connected / Ready' : 'No active session'}`, 60, 332);
+                ctx.fillText(`Session: ${sessionId}`, 60, 264);
+                ctx.fillText(`Participants: ${participantCount}`, 60, 306);
+                ctx.fillText(`Voice Call: ${isInCall ? 'ACTIVE' : 'INACTIVE'}`, 60, 348);
+                ctx.fillText(`Status: ${currentSessionId ? 'Connected / Ready' : 'No active session'}`, 60, 390);
 
-                this.renderActionButton(ctx, 60, 420, 290, 78, 'Create Session', 'collab.create', 'rgba(16,185,129,0.28)');
-                this.renderActionButton(ctx, 370, 420, 290, 78, 'Join Session', 'collab.join', 'rgba(59,130,246,0.28)');
-                this.renderActionButton(ctx, 680, 420, 290, 78, 'Copy Session ID', 'collab.copy', 'rgba(99,102,241,0.28)');
+                this.renderActionButton(ctx, 60, 436, 290, 76, 'Create Session', 'collab.create', 'rgba(16,185,129,0.28)');
+                this.renderActionButton(ctx, 370, 436, 290, 76, 'Join Session', 'collab.join', 'rgba(59,130,246,0.28)');
+                this.renderActionButton(ctx, 680, 436, 290, 76, 'Copy Session ID', 'collab.copy', 'rgba(99,102,241,0.28)');
 
-                this.renderActionButton(ctx, 60, 522, 290, 78, isInCall ? 'End Call' : 'Start Call', 'collab.call', 'rgba(14,165,233,0.28)');
-                this.renderActionButton(ctx, 370, 522, 290, 78, 'Generate MoM', 'collab.mom', 'rgba(245,158,11,0.28)');
-                this.renderActionButton(ctx, 680, 522, 290, 78, 'End Session', 'collab.end', 'rgba(239,68,68,0.28)');
+                this.renderActionButton(ctx, 60, 532, 290, 76, isInCall ? 'End Call' : 'Start Call', 'collab.call', 'rgba(14,165,233,0.28)');
+                this.renderActionButton(ctx, 370, 532, 290, 76, 'Generate MoM', 'collab.mom', 'rgba(245,158,11,0.28)');
+                this.renderActionButton(ctx, 680, 532, 290, 76, 'End Session', 'collab.end', 'rgba(239,68,68,0.28)');
 
-                this.renderActionButton(ctx, 60, 624, 290, 78, 'Refresh Status', 'collab.refresh');
-                this.renderActionButton(ctx, 370, 624, 290, 78, 'Open Desktop Tab', 'collab.desktop');
-                this.renderActionButton(ctx, 680, 624, 290, 78, 'Tutorial', 'collab.tutorial');
+                this.renderActionButton(ctx, 60, 628, 290, 76, 'Refresh Status', 'collab.refresh');
+                this.renderActionButton(ctx, 370, 628, 290, 76, 'Open Desktop Tab', 'collab.desktop');
+                this.renderActionButton(ctx, 680, 628, 290, 76, 'Tutorial', 'collab.tutorial');
 
-                ctx.fillStyle = '#94a3b8';
-                ctx.font = "500 22px 'Inter', sans-serif";
-                ctx.fillText('Create/Join a session first, then use call and MoM actions.', 60, 854);
+                ctx.strokeStyle = 'rgba(255,255,255,0.08)'; ctx.lineWidth = 1;
+                ctx.beginPath(); ctx.moveTo(40, 720); ctx.lineTo(984, 720); ctx.stroke();
+                ctx.fillStyle = '#64748b';
+                ctx.font = "400 20px 'Inter', sans-serif";
+                ctx.fillText('Create/Join a session first, then use call and MoM actions.', 60, 754);
             }
 
             renderInfoContent(ctx) {
@@ -16462,27 +17103,35 @@
                 ctx.fillStyle = '#e2e8f0';
                 ctx.font = "700 44px 'Inter', sans-serif";
                 ctx.textAlign = 'center';
-                ctx.fillText('Info & Instructions (VR Native)', 512, 170);
+                ctx.fillText('Info & Instructions (VR Native)', 512, 200);
+                ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = 1;
+                ctx.beginPath(); ctx.moveTo(40, 224); ctx.lineTo(984, 224); ctx.stroke();
 
                 ctx.fillStyle = '#93c5fd';
-                ctx.font = "600 24px 'Inter', sans-serif";
+                ctx.font = "700 24px 'Inter', sans-serif";
                 ctx.textAlign = 'left';
-                ctx.fillText('Dataset Summary', 60, 236);
+                ctx.fillText('Dataset Summary', 60, 268);
+                ctx.strokeStyle = 'rgba(147,197,253,0.25)'; ctx.lineWidth = 1;
+                ctx.beginPath(); ctx.moveTo(60, 278); ctx.lineTo(984, 278); ctx.stroke();
 
                 ctx.fillStyle = '#cbd5e1';
-                ctx.font = "500 20px 'Inter', sans-serif";
-                wrapText(infoText, 60, 272, 900, 30);
+                ctx.font = "400 20px 'Inter', sans-serif";
+                wrapText(infoText, 60, 308, 900, 32);
 
                 ctx.fillStyle = '#93c5fd';
-                ctx.font = "600 24px 'Inter', sans-serif";
-                ctx.fillText('Quick Help', 60, 392);
+                ctx.font = "700 24px 'Inter', sans-serif";
+                ctx.fillText('Quick Help', 60, 440);
+                ctx.strokeStyle = 'rgba(147,197,253,0.25)'; ctx.lineWidth = 1;
+                ctx.beginPath(); ctx.moveTo(60, 450); ctx.lineTo(984, 450); ctx.stroke();
                 ctx.fillStyle = '#cbd5e1';
-                ctx.font = "500 20px 'Inter', sans-serif";
-                wrapText('Grip to move model, thumbstick-click to open panel, trigger to place tools.', 60, 428, 900, 30);
+                ctx.font = "400 20px 'Inter', sans-serif";
+                wrapText('Grip to move model, thumbstick-click to open panel, trigger to place tools.', 60, 480, 900, 32);
 
-                this.renderActionButton(ctx, 60, 726, 290, 78, 'Start Tutorial', 'info.tutorial', 'rgba(59,130,246,0.28)');
-                this.renderActionButton(ctx, 370, 726, 290, 78, 'Open Desktop Tab', 'info.desktop');
-                this.renderActionButton(ctx, 680, 726, 290, 78, 'Process Another File', 'info.processAnother', 'rgba(16,185,129,0.28)');
+                ctx.strokeStyle = 'rgba(255,255,255,0.08)'; ctx.lineWidth = 1;
+                ctx.beginPath(); ctx.moveTo(40, 680); ctx.lineTo(984, 680); ctx.stroke();
+                this.renderActionButton(ctx, 60, 710, 290, 76, 'Start Tutorial', 'info.tutorial', 'rgba(59,130,246,0.28)');
+                this.renderActionButton(ctx, 370, 710, 290, 76, 'Open Desktop Tab', 'info.desktop');
+                this.renderActionButton(ctx, 680, 710, 290, 76, 'Process Another File', 'info.processAnother', 'rgba(16,185,129,0.28)');
             }
 
             renderRulerContent(ctx) {
@@ -16495,46 +17144,53 @@
                 ctx.fillStyle = '#e2e8f0';
                 ctx.font = "700 44px 'Inter', sans-serif";
                 ctx.textAlign = 'center';
-                ctx.fillText('Ruler (VR Native)', 512, 170);
+                ctx.fillText('Ruler (VR Native)', 512, 200);
+                ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = 1;
+                ctx.beginPath(); ctx.moveTo(40, 224); ctx.lineTo(984, 224); ctx.stroke();
 
                 ctx.fillStyle = '#93c5fd';
                 ctx.font = "600 24px 'Inter', sans-serif";
                 ctx.textAlign = 'left';
-                ctx.fillText(`Status: ${rulerOn ? 'ACTIVE' : 'INACTIVE'}`, 60, 238);
-                ctx.fillText(`Mode: ${activeTab}`, 60, 270);
-                ctx.fillText(`Points: ${pointCount}`, 60, 302);
-                ctx.fillText('Select mode, then Start Measuring and click scene with trigger.', 60, 336);
+                ctx.fillText(`Status: ${rulerOn ? 'ACTIVE' : 'INACTIVE'}`, 60, 264);
+                ctx.fillText(`Mode: ${activeTab}`, 60, 306);
+                ctx.fillText(`Points: ${pointCount}`, 60, 348);
+                ctx.fillStyle = '#64748b';
+                ctx.font = "400 20px 'Inter', sans-serif";
+                ctx.fillText('Select mode, then Start Measuring and click scene with trigger.', 60, 388);
 
-                this.renderActionButton(ctx, 60, 390, 280, 78,
+                this.renderActionButton(ctx, 60, 424, 280, 76,
                     rulerOn ? 'Stop Measuring' : 'Start Measuring',
                     rulerOn ? 'ruler.stop' : 'ruler.start',
                     rulerOn ? 'rgba(239,68,68,0.28)' : 'rgba(34,197,94,0.28)'
                 );
-                this.renderActionButton(ctx, 360, 390, 280, 78, 'Clear', 'ruler.clear', 'rgba(239,68,68,0.28)');
-                this.renderActionButton(ctx, 660, 390, 300, 78, 'Save Measurement', 'ruler.save', 'rgba(59,130,246,0.28)');
+                this.renderActionButton(ctx, 360, 424, 280, 76, 'Clear', 'ruler.clear', 'rgba(239,68,68,0.28)');
+                this.renderActionButton(ctx, 660, 424, 300, 76, 'Save Measurement', 'ruler.save', 'rgba(59,130,246,0.28)');
 
-                this.renderActionButton(ctx, 60, 500, 145, 72, 'Line', 'ruler.mode.line', activeTab === 'line' ? 'rgba(14,165,233,0.35)' : 'rgba(255,255,255,0.1)');
-                this.renderActionButton(ctx, 220, 500, 145, 72, 'Path', 'ruler.mode.path', activeTab === 'path' ? 'rgba(14,165,233,0.35)' : 'rgba(255,255,255,0.1)');
-                this.renderActionButton(ctx, 380, 500, 145, 72, 'Polygon', 'ruler.mode.polygon', activeTab === 'polygon' ? 'rgba(14,165,233,0.35)' : 'rgba(255,255,255,0.1)');
-                this.renderActionButton(ctx, 540, 500, 145, 72, 'Circle', 'ruler.mode.circle', activeTab === 'circle' ? 'rgba(14,165,233,0.35)' : 'rgba(255,255,255,0.1)');
-                this.renderActionButton(ctx, 700, 500, 145, 72, '3D Path', 'ruler.mode.3d_path', activeTab === '3d_path' ? 'rgba(14,165,233,0.35)' : 'rgba(255,255,255,0.1)');
-                this.renderActionButton(ctx, 860, 500, 104, 72, '3D Poly', 'ruler.mode.3d_polygon', activeTab === '3d_polygon' ? 'rgba(14,165,233,0.35)' : 'rgba(255,255,255,0.1)');
+                this.renderActionButton(ctx, 60, 520, 145, 70, 'Line', 'ruler.mode.line', activeTab === 'line' ? 'rgba(14,165,233,0.35)' : 'rgba(255,255,255,0.1)');
+                this.renderActionButton(ctx, 220, 520, 145, 70, 'Path', 'ruler.mode.path', activeTab === 'path' ? 'rgba(14,165,233,0.35)' : 'rgba(255,255,255,0.1)');
+                this.renderActionButton(ctx, 380, 520, 145, 70, 'Polygon', 'ruler.mode.polygon', activeTab === 'polygon' ? 'rgba(14,165,233,0.35)' : 'rgba(255,255,255,0.1)');
+                this.renderActionButton(ctx, 540, 520, 145, 70, 'Circle', 'ruler.mode.circle', activeTab === 'circle' ? 'rgba(14,165,233,0.35)' : 'rgba(255,255,255,0.1)');
+                this.renderActionButton(ctx, 700, 520, 145, 70, '3D Path', 'ruler.mode.3d_path', activeTab === '3d_path' ? 'rgba(14,165,233,0.35)' : 'rgba(255,255,255,0.1)');
+                this.renderActionButton(ctx, 860, 520, 104, 70, '3D Poly', 'ruler.mode.3d_polygon', activeTab === '3d_polygon' ? 'rgba(14,165,233,0.35)' : 'rgba(255,255,255,0.1)');
 
-                this.renderActionButton(ctx, 60, 608, 290, 78, 'Export KML', 'ruler.exportKML');
-                this.renderActionButton(ctx, 370, 608, 290, 78, 'Export KMZ', 'ruler.exportKMZ');
-                this.renderActionButton(ctx, 680, 608, 290, 78, 'Export SHP', 'ruler.exportSHP');
+                this.renderActionButton(ctx, 60, 612, 290, 76, 'Export KML', 'ruler.exportKML');
+                this.renderActionButton(ctx, 370, 612, 290, 76, 'Export KMZ', 'ruler.exportKMZ');
+                this.renderActionButton(ctx, 680, 612, 290, 76, 'Export SHP', 'ruler.exportSHP');
 
                 const lineMap = document.getElementById('ruler-line-map-length')?.textContent || '0.00';
                 const lineGround = document.getElementById('ruler-line-ground-length')?.textContent || '0.00';
                 const pathLen = document.getElementById('ruler-path-length')?.textContent || '0.00';
                 const polyArea = document.getElementById('ruler-poly-area')?.textContent || '0.00';
 
-                ctx.fillStyle = '#cbd5e1';
+                ctx.strokeStyle = 'rgba(255,255,255,0.08)'; ctx.lineWidth = 1;
+                ctx.beginPath(); ctx.moveTo(40, 704); ctx.lineTo(984, 704); ctx.stroke();
+                ctx.fillStyle = '#93c5fd';
                 ctx.font = "600 22px 'Inter', sans-serif";
-                ctx.fillText(`Line Map: ${lineMap}`, 60, 740);
-                ctx.fillText(`Line Ground: ${lineGround}`, 60, 774);
-                ctx.fillText(`Path Length: ${pathLen}`, 60, 808);
-                ctx.fillText(`Polygon Area: ${polyArea}`, 60, 842);
+                ctx.fillText('Measurements', 60, 740);
+                ctx.fillStyle = '#cbd5e1';
+                ctx.font = "500 20px 'Inter', sans-serif";
+                ctx.fillText(`Line Map: ${lineMap}   Line Ground: ${lineGround}`, 60, 778);
+                ctx.fillText(`Path Length: ${pathLen}   Polygon Area: ${polyArea}`, 60, 814);
             }
 
             renderAnnotationsContent(ctx) {
@@ -16563,75 +17219,79 @@
                 ctx.fillStyle = '#e2e8f0';
                 ctx.font = "700 44px 'Inter', sans-serif";
                 ctx.textAlign = 'center';
-                ctx.fillText('Annotations (VR Native)', 512, 170);
+                ctx.fillText('Annotations (VR Native)', 512, 200);
+                ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = 1;
+                ctx.beginPath(); ctx.moveTo(40, 224); ctx.lineTo(984, 224); ctx.stroke();
 
                 // --- ANNOTATION DETAILS SECTION ---
                 ctx.fillStyle = '#93c5fd';
-                ctx.font = "600 24px 'Inter', sans-serif";
+                ctx.font = "700 22px 'Inter', sans-serif";
                 ctx.textAlign = 'left';
-                ctx.fillText('ANNOTATION DETAILS', 60, 236);
+                ctx.fillText('ANNOTATION DETAILS', 60, 264);
+                ctx.strokeStyle = 'rgba(147,197,253,0.25)'; ctx.lineWidth = 1;
+                ctx.beginPath(); ctx.moveTo(60, 274); ctx.lineTo(984, 274); ctx.stroke();
 
                 // Label display and info
-                ctx.fillStyle = '#cbd5e1';
+                ctx.fillStyle = '#64748b';
                 ctx.font = "400 18px 'Inter', sans-serif";
-                ctx.fillText('Label:', 60, 268);
+                ctx.fillText('Label:', 60, 304);
                 ctx.fillStyle = '#e0e7ff';
                 ctx.font = "600 18px 'Inter', sans-serif";
-                ctx.fillText(currentLabel.substring(0, 40), 180, 268);
+                ctx.fillText(currentLabel.substring(0, 40), 180, 304);
 
                 // Color display with preview
-                ctx.fillStyle = '#cbd5e1';
+                ctx.fillStyle = '#64748b';
                 ctx.font = "400 18px 'Inter', sans-serif";
-                ctx.fillText('Color:', 60, 304);
-                // Draw color preview box
+                ctx.fillText('Color:', 60, 344);
                 ctx.fillStyle = currentColor;
-                ctx.fillRect(180, 288, 40, 32);
-                ctx.strokeStyle = '#666';
-                ctx.lineWidth = 2;
-                ctx.strokeRect(180, 288, 40, 32);
+                ctx.fillRect(180, 328, 40, 28);
+                ctx.strokeStyle = '#555'; ctx.lineWidth = 1.5;
+                ctx.strokeRect(180, 328, 40, 28);
 
                 // Note display (truncated)
-                ctx.fillStyle = '#cbd5e1';
+                ctx.fillStyle = '#64748b';
                 ctx.font = "400 18px 'Inter', sans-serif";
-                ctx.fillText('Note:', 60, 352);
+                ctx.fillText('Note:', 60, 386);
                 ctx.fillStyle = '#e0e7ff';
                 ctx.font = "400 16px 'Inter', sans-serif";
                 const noteDisplay = currentNote ? currentNote.substring(0, 45) : '(no description)';
-                ctx.fillText(noteDisplay, 60, 380);
+                ctx.fillText(noteDisplay, 60, 414);
 
                 // Quick controls to edit annotation details
-                this.renderActionButton(ctx, 60, 412, 140, 56, 'Color<<', 'ann.colorPrev', 'rgba(249,115,22,0.3)');
-                this.renderActionButton(ctx, 210, 412, 140, 56, 'Color>>', 'ann.colorNext', 'rgba(249,115,22,0.3)');
-                this.renderActionButton(ctx, 360, 412, 140, 56, 'Label', 'ann.labelReset', 'rgba(59,130,246,0.3)');
-                this.renderActionButton(ctx, 510, 412, 140, 56, 'Note', 'ann.noteReset', 'rgba(96,165,250,0.3)');
+                this.renderActionButton(ctx, 60, 442, 140, 54, 'Color<<', 'ann.colorPrev', 'rgba(249,115,22,0.3)');
+                this.renderActionButton(ctx, 210, 442, 140, 54, 'Color>>', 'ann.colorNext', 'rgba(249,115,22,0.3)');
+                this.renderActionButton(ctx, 360, 442, 140, 54, 'Label', 'ann.labelReset', 'rgba(59,130,246,0.3)');
+                this.renderActionButton(ctx, 510, 442, 140, 54, 'Note', 'ann.noteReset', 'rgba(96,165,250,0.3)');
 
+                ctx.strokeStyle = 'rgba(255,255,255,0.08)'; ctx.lineWidth = 1;
+                ctx.beginPath(); ctx.moveTo(40, 510); ctx.lineTo(984, 510); ctx.stroke();
                 ctx.fillStyle = '#93c5fd';
                 ctx.font = "600 22px 'Inter', sans-serif";
                 ctx.textAlign = 'left';
-                ctx.fillText(`Active Tool: ${activeTool}`, 60, 500);
-                ctx.fillText(`Pending Points: ${pending}`, 60, 532);
-                ctx.fillText(`Saved: ${saved}`, 60, 564);
+                ctx.fillText(`Active Tool: ${activeTool}`, 60, 544);
+                ctx.fillText(`Pending Points: ${pending}`, 60, 578);
+                ctx.fillText(`Saved: ${saved}`, 60, 612);
 
                 // --- TOOL BUTTONS ---
-                this.renderActionButton(ctx, 60, 614, 180, 78, 'Pin', 'ann.tool.pin', 'rgba(14,165,233,0.28)');
-                this.renderActionButton(ctx, 250, 614, 180, 78, 'Label', 'ann.tool.label', 'rgba(14,165,233,0.28)');
-                this.renderActionButton(ctx, 440, 614, 180, 78, 'Note', 'ann.tool.note', 'rgba(14,165,233,0.28)');
-                this.renderActionButton(ctx, 630, 614, 160, 78, 'Line', 'ann.tool.line', 'rgba(139,92,246,0.28)');
-                this.renderActionButton(ctx, 800, 614, 160, 78, 'Polygon', 'ann.tool.polygon', 'rgba(139,92,246,0.28)');
+                this.renderActionButton(ctx, 60, 648, 180, 72, 'Pin', 'ann.tool.pin', 'rgba(14,165,233,0.28)');
+                this.renderActionButton(ctx, 250, 648, 180, 72, 'Label', 'ann.tool.label', 'rgba(14,165,233,0.28)');
+                this.renderActionButton(ctx, 440, 648, 180, 72, 'Note', 'ann.tool.note', 'rgba(14,165,233,0.28)');
+                this.renderActionButton(ctx, 630, 648, 160, 72, 'Line', 'ann.tool.line', 'rgba(139,92,246,0.28)');
+                this.renderActionButton(ctx, 800, 648, 160, 72, 'Polygon', 'ann.tool.polygon', 'rgba(139,92,246,0.28)');
 
-                this.renderActionButton(ctx, 60, 716, 180, 78, 'Sphere', 'ann.tool.sphere');
-                this.renderActionButton(ctx, 250, 716, 180, 78, 'Hazard', 'ann.tool.hazard');
-                this.renderActionButton(ctx, 440, 716, 180, 78, 'Flag', 'ann.tool.flag');
-                this.renderActionButton(ctx, 630, 716, 160, 78, 'Arrow', 'ann.tool.arrow');
-                this.renderActionButton(ctx, 800, 716, 160, 78, 'Stamp', 'ann.stamp');
+                this.renderActionButton(ctx, 60, 740, 180, 72, 'Sphere', 'ann.tool.sphere');
+                this.renderActionButton(ctx, 250, 740, 180, 72, 'Hazard', 'ann.tool.hazard');
+                this.renderActionButton(ctx, 440, 740, 180, 72, 'Flag', 'ann.tool.flag');
+                this.renderActionButton(ctx, 630, 740, 160, 72, 'Arrow', 'ann.tool.arrow');
+                this.renderActionButton(ctx, 800, 740, 160, 72, 'Stamp', 'ann.stamp');
 
-                this.renderActionButton(ctx, 60, 818, 290, 78, 'Finish Multi-Point', 'ann.finish', 'rgba(34,197,94,0.28)');
-                this.renderActionButton(ctx, 370, 818, 290, 78, 'Cancel Tool', 'ann.cancel', 'rgba(239,68,68,0.28)');
-                this.renderActionButton(ctx, 680, 818, 290, 78, 'Reload List', 'ann.reload', 'rgba(59,130,246,0.28)');
+                this.renderActionButton(ctx, 60, 836, 290, 72, 'Finish Multi-Point', 'ann.finish', 'rgba(34,197,94,0.28)');
+                this.renderActionButton(ctx, 370, 836, 290, 72, 'Cancel Tool', 'ann.cancel', 'rgba(239,68,68,0.28)');
+                this.renderActionButton(ctx, 680, 836, 290, 72, 'Reload List', 'ann.reload', 'rgba(59,130,246,0.28)');
 
-                this.renderActionButton(ctx, 60, 920, 290, 78, 'Export JSON', 'ann.exportJSON');
-                this.renderActionButton(ctx, 370, 920, 290, 78, 'Export KML', 'ann.exportKML');
-                this.renderActionButton(ctx, 680, 920, 290, 78, 'Clear All', 'ann.clearAll');
+                this.renderActionButton(ctx, 60, 932, 290, 72, 'Export JSON', 'ann.exportJSON');
+                this.renderActionButton(ctx, 370, 932, 290, 72, 'Export KML', 'ann.exportKML');
+                this.renderActionButton(ctx, 680, 932, 290, 72, 'Clear All', 'ann.clearAll');
             }
 
             confirmKeyboardInput() {
@@ -16821,7 +17481,7 @@
             handleInteraction(uv) {
                 if (!this.active) return false;
                 const px = uv.x * 1024;
-                const py = (1 - uv.y) * 1024;
+                const py = (1 - uv.y) * 1280;
 
                 if (this.mode === 'slices' && this.sliceSliderRect) {
                     const r = this.sliceSliderRect;
@@ -16866,6 +17526,17 @@
                 }
                 if (action === 'back') {
                     this.mode = 'menu';
+                    this.render();
+                    return;
+                }
+                if (action === 'page.solids.prev' || action === 'page.solids.next') {
+                    const count = this.tabPageCounts && this.tabPageCounts.solids ? this.tabPageCounts.solids : 2;
+                    const cur = this.tabPages && typeof this.tabPages.solids === 'number' ? this.tabPages.solids : 0;
+                    const next = action === 'page.solids.next'
+                        ? (cur + 1) % count
+                        : (cur - 1 + count) % count;
+                    if (!this.tabPages) this.tabPages = { solids: 0 };
+                    this.tabPages.solids = next;
                     this.render();
                     return;
                 }
@@ -17183,6 +17854,60 @@
                 } else if (action === 'solids.toggleShowLoaded' && showLoadedSavedSolids && window.toggleLoadedSavedSolids) {
                     showLoadedSavedSolids.checked = !showLoadedSavedSolids.checked;
                     window.toggleLoadedSavedSolids(showLoadedSavedSolids.checked);
+                } else if (action === 'boundaries.create') {
+                    if (typeof window.create3DBoundaryFromSelectedRegion === 'function') {
+                        window.create3DBoundaryFromSelectedRegion();
+                        this.statusMessage = '3D boundary created';
+                    }
+                } else if (action === 'boundaries.selectArea') {
+                    if (typeof window.startBoundaryAreaSelection === 'function') {
+                        window.startBoundaryAreaSelection();
+                        this.statusMessage = 'Boundary area selection started';
+                        this.hide();
+                    }
+                } else if (action === 'boundaries.exportJSON') {
+                    if (typeof window.exportBoundaries === 'function') {
+                        window.exportBoundaries();
+                        this.statusMessage = 'Exporting boundaries (JSON)';
+                    }
+                } else if (action === 'boundaries.importJSON') {
+                    const el = document.getElementById('boundaryImportFile');
+                    if (el) el.click();
+                    this.statusMessage = 'Open file picker to import boundaries';
+                } else if (action === 'boundaries.exportKML') {
+                    if (typeof window.exportBoundariesKML === 'function') {
+                        window.exportBoundariesKML();
+                        this.statusMessage = 'Exporting boundaries (KML)';
+                    }
+                } else if (action === 'boundaries.importKML') {
+                    const el = document.getElementById('boundaryKmlInput');
+                    if (el) el.click();
+                    this.statusMessage = 'Open file picker to import KML';
+                } else if (action === 'boundaries.saveSet') {
+                    if (typeof window.saveBoundarySet === 'function') {
+                        window.saveBoundarySet();
+                        this.statusMessage = 'Boundary set saved';
+                    }
+                } else if (action === 'boundaries.loadSet') {
+                    if (typeof window.loadSelectedBoundarySet === 'function') {
+                        window.loadSelectedBoundarySet();
+                        this.statusMessage = 'Boundary set loaded';
+                        this.hide();
+                    }
+                } else if (action === 'boundaries.deleteSet') {
+                    if (typeof window.deleteSelectedBoundarySet === 'function') {
+                        window.deleteSelectedBoundarySet();
+                        this.statusMessage = 'Boundary set deleted';
+                    }
+                } else if (action === 'boundaries.toggleShow') {
+                    if (typeof window.toggleBoundaryVisibility === 'function') {
+                        window.toggleBoundaryVisibility();
+                    } else if (window.solidReconstructState && Array.isArray(window.solidReconstructState.meshes)) {
+                        const meshes = window.solidReconstructState.meshes;
+                        let anyVisible = meshes.some(m => m && m.userData && m.userData.type === '3d_boundary' && m.visible);
+                        meshes.forEach(m => { if (m && m.userData && m.userData.type === '3d_boundary') m.visible = !anyVisible; });
+                    }
+                    this.statusMessage = 'Toggled boundary visibility';
                 } else if (action === 'collab.create' && window.createCollaborationSession) {
                     window.createCollaborationSession();
                 } else if (action === 'collab.join' && window.joinCollaborationSession) {
@@ -19223,9 +19948,9 @@
                 const metaStr = JSON.stringify(metadata || {});
                 const body = { ann_type: type, label, color, note, positions: posStr, metadata: metaStr };
                 try {
-                    const res = await fetch(`/api/annotations/${this._jobId}`, {
+                    const res = await fetchWithSessionRefresh(`/api/annotations/${this._jobId}`, {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: csrfHeaders({ 'Content-Type': 'application/json' }),
                         body: JSON.stringify(body)
                     });
                     const data = await res.json();
@@ -19357,7 +20082,7 @@
                 this.savedList = this.savedList.filter(a => a.id !== id);
                 this._renderList();
                 try {
-                    await fetch(`/api/annotations/${this._jobId}/${id}`, { method: 'DELETE' });
+                    await fetchWithSessionRefresh(`/api/annotations/${this._jobId}/${id}`, { method: 'DELETE', headers: csrfHeaders() });
                     if (!collabApplying.annotation) {
                         sendCollabMessage({ type: 'annotation_delete', id });
                     }
@@ -19378,7 +20103,7 @@
             clearAll() {
                 this.savedList.forEach(a => {
                     if (a.object3D) this.group.remove(a.object3D);
-                    fetch(`/api/annotations/${this._jobId}/${a.id}`, { method: 'DELETE' }).catch(() => { });
+                    fetchWithSessionRefresh(`/api/annotations/${this._jobId}/${a.id}`, { method: 'DELETE', headers: csrfHeaders() }).catch(() => { });
                 });
                 this.savedList = [];
                 this._renderList();

@@ -1,0 +1,114 @@
+# RS256 Quick Reference
+
+## Algorithm Change
+- **Old**: HS256 (HMAC-SHA256, symmetric)
+- **New**: RS256 (RSA-SHA256, asymmetric)
+
+## Key Files
+```
+private.pem     ← KEEP SECRET (for signing tokens)
+public.pem      ← Can be shared (for verifying tokens)
+```
+
+## Configuration
+```python
+# In app/config.py
+JWT_ALGORITHM = "RS256"
+JWT_PRIVATE_KEY = "..."  # Loaded automatically
+JWT_PUBLIC_KEY = "..."   # Loaded automatically
+```
+
+## Token Flow
+
+### Creating Token (Login)
+```python
+from app.routes.auth_routes import create_access_token
+
+# When user logs in:
+token = create_access_token({"sub": user_email})
+
+# Signs with: private key + RS256
+# Returns: Signed JWT token
+```
+
+### Verifying Token (Protected Routes)
+```python
+from app.routes.auth_routes import verify_token
+
+# When user accesses protected resource:
+email = verify_token(access_token)
+
+# Verifies with: public key + RS256
+# Returns: Email if valid, None if invalid
+```
+
+## Development Setup
+```bash
+# 1. Generate keys (one time)
+python generate_rsa_keys.py
+
+# 2. Keys created automatically
+# private.pem and public.pem now exist
+
+# 3. Run application
+python main.py
+
+# App auto-loads keys from files
+```
+
+## Production Setup
+```bash
+# Set environment variables
+export JWT_PRIVATE_KEY="$(cat private.pem)"
+export JWT_PUBLIC_KEY="$(cat public.pem)"
+
+# Then run
+python main.py
+```
+
+## Testing
+```bash
+# Test config
+python -c "from app.config import config; print(config.JWT_ALGORITHM)"
+
+# Test tokens
+python << 'EOF'
+from app.routes.auth_routes import create_access_token, verify_token
+token = create_access_token({"sub": "test@example.com"})
+print(verify_token(token))  # Should print: test@example.com
+EOF
+```
+
+## Key Security
+
+✅ **DO:**
+- Keep private.pem secret
+- Use environment variables in production
+- Rotate keys periodically
+- Back up keys securely
+
+❌ **DON'T:**
+- Commit private.pem to git (already in .gitignore)
+- Share the private key
+- Reset keys every deploy
+
+## Files Changed
+- `app/config.py` - Configuration for RS256
+- `app/routes/auth_routes.py` - JWT creation/verification
+
+## Files Added
+- `generate_rsa_keys.py` - Key generation script
+- `private.pem` - RSA private key
+- `public.pem` - RSA public key
+- `.env.example` - Environment template
+- `RS256_MIGRATION.md` - Full guide
+- `RS256_MIGRATION_SUMMARY.md` - Summary
+
+## Status Check
+```bash
+# Verify migration works
+python -c "from app.routes.auth_routes import create_access_token, verify_token; token = create_access_token({'sub': 'test@example.com'}); print('✓ RS256 Working' if verify_token(token) == 'test@example.com' else '✗ Failed')"
+```
+
+## Need Help?
+See `RS256_MIGRATION.md` for complete documentation

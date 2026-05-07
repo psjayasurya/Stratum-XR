@@ -43,6 +43,7 @@
         {% endif %}
 
         <form method="POST" action="/verify-reset-otp">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <input type="hidden" name="email" value="{{ email }}">
 
             <div class="form-group">

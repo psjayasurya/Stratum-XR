@@ -2,12 +2,13 @@
 Annotation Routes
 Handles CRUD operations for 3D scene annotations tied to GPR jobs.
 """
-from fastapi import APIRouter, HTTPException, Cookie
+from fastapi import APIRouter, HTTPException, Cookie, Request
 from typing import Optional
 
 from app.database import get_db
 from app.models import AnnotationCreate, AnnotationUpdate
 from app.routes.auth_routes import get_current_user
+from app.utils.auth_security import validate_csrf
 
 
 router = APIRouter(prefix="/api/annotations", tags=["Annotations"])
@@ -68,6 +69,7 @@ async def list_annotations(job_id: str, access_token: Optional[str] = Cookie(Non
 
 @router.post("/{job_id}")
 async def create_annotation(
+    request: Request,
     job_id: str,
     payload: AnnotationCreate,
     access_token: Optional[str] = Cookie(None)
@@ -86,6 +88,8 @@ async def create_annotation(
     user = get_current_user(access_token)
     if not user:
         raise HTTPException(status_code=401, detail="Unauthorized")
+
+    validate_csrf(request, request.headers.get("x-csrf-token"))
 
     try:
         conn = get_db()
@@ -125,6 +129,7 @@ async def create_annotation(
 
 @router.put("/{job_id}/{ann_id}")
 async def update_annotation(
+    request: Request,
     job_id: str,
     ann_id: int,
     payload: AnnotationUpdate,
@@ -145,6 +150,8 @@ async def update_annotation(
     user = get_current_user(access_token)
     if not user:
         raise HTTPException(status_code=401, detail="Unauthorized")
+
+    validate_csrf(request, request.headers.get("x-csrf-token"))
 
     try:
         conn = get_db()
@@ -168,6 +175,7 @@ async def update_annotation(
 
 @router.delete("/{job_id}/{ann_id}")
 async def delete_annotation(
+    request: Request,
     job_id: str,
     ann_id: int,
     access_token: Optional[str] = Cookie(None)
@@ -186,6 +194,8 @@ async def delete_annotation(
     user = get_current_user(access_token)
     if not user:
         raise HTTPException(status_code=401, detail="Unauthorized")
+
+    validate_csrf(request, request.headers.get("x-csrf-token"))
 
     try:
         conn = get_db()

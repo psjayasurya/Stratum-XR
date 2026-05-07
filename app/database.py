@@ -22,6 +22,13 @@ def init_db():
     try:
         conn = psycopg2.connect(config.DATABASE_URL)
         cur = conn.cursor()
+
+        # Add auth hardening columns to users when the table already exists.
+        cur.execute("ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS token_version INTEGER DEFAULT 0")
+        cur.execute("ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS otp_expires_at TIMESTAMP")
+        cur.execute("ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS otp_attempts INTEGER DEFAULT 0")
+        cur.execute("ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS otp_last_sent_at TIMESTAMP")
+        cur.execute("ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS password_changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
         
         # Create saved_views table if not exists
         cur.execute("""
@@ -95,6 +102,25 @@ def init_db():
         cur.execute("""
             CREATE INDEX IF NOT EXISTS idx_user_mesh_alignments_user
             ON user_mesh_alignments (user_email);
+        """)
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS auth_sessions (
+                session_jti VARCHAR(64) PRIMARY KEY,
+                user_email VARCHAR(255) NOT NULL,
+                token_hash VARCHAR(128) NOT NULL,
+                expires_at TIMESTAMP NOT NULL,
+                revoked_at TIMESTAMP,
+                last_used_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                user_agent VARCHAR(255) DEFAULT '',
+                ip_address VARCHAR(64) DEFAULT '',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_auth_sessions_user
+            ON auth_sessions (user_email);
         """)
 
         conn.commit()

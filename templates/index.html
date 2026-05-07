@@ -1099,6 +1099,7 @@
                 <img id="profileIconImg" src="" alt="" style="display:none;">
             </button>
             <form method="POST" action="/logout">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <button class="logout-btn">Log Out</button>
             </form>
         </div>
@@ -1685,7 +1686,7 @@
                     formData.append('font_size_multiplier', document.getElementById('fontSizeMultiplier').value);
                     formData.append('font_family', document.getElementById('fontFamily').value);
 
-                    const res = await fetch('/upload', { method: 'POST', body: formData });
+                    const res = await fetchWithSessionRefresh('/upload', { method: 'POST', headers: csrfHeaders(), body: formData });
                     const data = await res.json();
 
                     if (data.error) throw new Error(data.error);
@@ -1863,9 +1864,9 @@
             if (!name) return;
 
             try {
-                const res = await fetch('/api/saved-views', {
+                const res = await fetchWithSessionRefresh('/api/saved-views', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: csrfHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({
                         name: name,
                         job_ids: Array.from(selectedProjectIds)
@@ -1889,7 +1890,7 @@
             if (!confirm("Delete this saved view?")) return;
 
             try {
-                await fetch(`/api/saved-views/${id}`, { method: 'DELETE' });
+                await fetchWithSessionRefresh(`/api/saved-views/${id}`, { method: 'DELETE', headers: csrfHeaders() });
                 loadSavedViews();
             } catch (e) { console.error(e); }
         }
@@ -1978,9 +1979,9 @@
 
             const ids = Array.from(selectedProjectIds);
             try {
-                const res = await fetch('/api/cleanup-batch', {
+                const res = await fetchWithSessionRefresh('/api/cleanup-batch', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: csrfHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ job_ids: ids })
                 });
 
@@ -2004,7 +2005,7 @@
         async function deleteProject(id, e) {
             e.stopPropagation();
             if (!confirm("Delete this project?")) return;
-            await fetch(`/cleanup/${id}`);
+            await fetchWithSessionRefresh(`/cleanup/${id}`, { headers: csrfHeaders() });
             loadProjects();
         }
         // --- THEME TOGGLE ---
@@ -2107,6 +2108,50 @@
             }
         }
 
+        function getCookie(name) {
+            return document.cookie.split('; ').reduce((value, entry) => {
+                const [cookieName, ...cookieValueParts] = entry.split('=');
+                if (cookieName === name) {
+                    return decodeURIComponent(cookieValueParts.join('='));
+                }
+                return value;
+            }, '');
+        }
+
+        function csrfHeaders(extraHeaders = {}) {
+            return {
+                ...extraHeaders,
+                'X-CSRF-Token': getCookie('csrf_token')
+            };
+        }
+
+        async function refreshAuthSession() {
+            const csrfToken = getCookie('csrf_token');
+            const response = await fetch('/api/auth/refresh', {
+                method: 'POST',
+                headers: {
+                    'X-CSRF-Token': csrfToken
+                },
+                body: new URLSearchParams({ csrf_token: csrfToken })
+            });
+
+            return response.ok;
+        }
+
+        async function fetchWithSessionRefresh(url, options = {}, retry = true) {
+            const response = await fetch(url, options);
+            if (response.status !== 401 || !retry) {
+                return response;
+            }
+
+            const refreshed = await refreshAuthSession();
+            if (!refreshed) {
+                return response;
+            }
+
+            return fetch(url, options);
+        }
+
         async function saveProfile() {
             const statusEl = document.getElementById('profileSaveStatus');
             statusEl.textContent = 'Saving...';
@@ -2122,7 +2167,7 @@
             }
 
             try {
-                const res = await fetch('/api/profile', { method: 'POST', body: formData });
+                const res = await fetchWithSessionRefresh('/api/profile', { method: 'POST', headers: csrfHeaders(), body: formData });
                 const data = await res.json();
                 if (data.success) {
                     statusEl.textContent = '✓ Profile saved successfully!';

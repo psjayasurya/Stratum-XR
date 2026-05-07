@@ -39,6 +39,7 @@
                 </div>
             </div>
             <form method="POST" action="/logout">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <button type="submit" class="logout-btn" style="width: auto; padding: 10px 20px; font-size: 0.75rem;">
                     <i class="fas fa-power-off"></i> Terminate Session
                 </button>

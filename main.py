@@ -3,10 +3,9 @@ GPR VR Processor - Main Application
 Refactored modular structure with clean separation of concerns.
 """
 import os
-import multiprocessing
-from concurrent.futures import ProcessPoolExecutor
 from contextlib import asynccontextmanager
 from datetime import datetime
+import multiprocessing
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
@@ -33,7 +32,7 @@ from app.database import init_db
 from app.limiter import limiter
 
 # Import service containers
-from app.services.gpr_processor import ExecutorContainer
+from app.services.job_queue import start_job_queue, stop_job_queue
 
 # Import all routers
 from app.routes import auth_routes, upload_routes, job_routes, tool_routes, session_routes, annotation_routes
@@ -44,17 +43,14 @@ from app.routes import auth_routes, upload_routes, job_routes, tool_routes, sess
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler for startup and shutdown"""
-    # Startup logic: Initialize executor for both reload and normal modes
     print("Application started")
-    print(f"Initializing ProcessPoolExecutor with {MAX_WORKERS} workers")
-    ExecutorContainer.executor = ProcessPoolExecutor(max_workers=MAX_WORKERS)
+    print(f"Starting job queue with up to {MAX_WORKERS} workers")
+    start_job_queue()
     init_db()  # Ensure database tables exist
     yield
-    # Shutdown logic: Cleanup executor
-    if ExecutorContainer.executor:
-        print("Shutting down process pool executor via lifespan...")
-        ExecutorContainer.executor.shutdown(wait=True)
-        print("Process pool executor shutdown complete")
+    print("Shutting down job queue...")
+    stop_job_queue()
+    print("Job queue shutdown complete")
 
 
 from fastapi.middleware.gzip import GZipMiddleware
@@ -97,7 +93,12 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # Add session middleware
-app.add_middleware(SessionMiddleware, secret_key=config.SECRET_KEY)
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=config.SECRET_KEY,
+    https_only=config.COOKIE_SECURE,
+    same_site=config.COOKIE_SAMESITE,
+)
 
 # Add CORS middleware
 app.add_middleware(
@@ -336,7 +337,4 @@ if __name__ == "__main__":
         )
     finally:
         # Cleanup on exit
-        if ExecutorContainer.executor:
-            print("\nShutting down process pool executor...")
-            ExecutorContainer.executor.shutdown(wait=True)
-            print("Process pool executor shutdown complete")
+        stop_job_queue()
